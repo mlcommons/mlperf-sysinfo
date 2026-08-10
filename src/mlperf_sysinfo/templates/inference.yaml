@@ -1,0 +1,34 @@
+# MLPerf system description -- inference profile
+#
+#   mlperf-sysinfo check   -c sysinfo.yaml     # validate + reach everything
+#   mlperf-sysinfo capture -c sysinfo.yaml     # collect and write the file
+#
+# Writes the flat field set the MLPerf Inference submission checker expects.
+# Anything detectable is absent below on purpose -- only what cannot be
+# detected belongs in this file.
+
+profile: inference
+
+output:
+  dir: results/sysinfo
+
+system:
+  name: CHANGEME                 # e.g. 8xH100_TRT
+  category: datacenter           # datacenter | edge
+  availability: available        # available | preview | rdi
+  accelerator: cuda              # cuda | rocm | xpu | none
+  cooling: air
+  # type_detail: ""
+
+nodes:
+  include_local: true            # single machine: describe the one running this
+  ssh: []                        # add user@host entries for a multi-node system
+  ssh_key_preconfigured: false
+
+submission:
+  submitter: CHANGEME
+  contact: CHANGEME@example.com
+  division: closed               # closed | open
+  notes:
+    hardware: ""
+    software: ""

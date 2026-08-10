@@ -1,0 +1,65 @@
+# MLPerf system description -- endpoints profile
+#
+#   mlperf-sysinfo check   -c sysinfo.yaml     # validate + reach everything
+#   mlperf-sysinfo capture -c sysinfo.yaml     # collect and write the file
+#
+# Anything the tool can detect for itself -- CPU, memory, accelerators, node
+# counts, framework version -- is deliberately absent below. Only what cannot
+# be detected belongs in this file.
+
+profile: endpoints
+
+output:
+  dir: results/sysinfo
+
+system:
+  name: CHANGEME                 # e.g. H100x8_vLLM
+  category: datacenter           # datacenter | edge
+  availability: available        # available | preview | rdi
+  accelerator: cuda              # cuda | rocm | xpu | none
+  cooling: air
+
+nodes:
+  include_local: false           # is this machine part of the system under test?
+  ssh:
+    - user@node1
+    # - user@node2:2222
+  ssh_key_preconfigured: false
+
+  # Optional. Only needed for disaggregated setups, where nodes serve
+  # different functions. 'match' is compared case-insensitively against the
+  # detected accelerator model name.
+  # groups:
+  #   prefill:
+  #     - { match: NVIDIA H100, count: 2 }
+  #   decode:
+  #     - { match: NVIDIA H100, count: 5 }
+
+serving:
+  url: http://node1:8000         # probed for framework name and version
+  node: user@node1               # where the server process runs
+  log: /tmp/serving.log          # server stdout/stderr must be redirected here
+  framework: auto                # auto | vllm | sglang | trtllm
+
+# Optional BMC power capture. Credentials are read from the environment --
+# never write them into this file.
+# power:
+#   redfish:
+#     endpoint: https://bmc.node1
+#     username: ${BMC_USER}
+#     password: ${BMC_PASSWORD}
+
+submission:
+  submitter: CHANGEME
+  contact: CHANGEME@example.com
+  division: standardized         # standardized | open
+  model:
+    name: CHANGEME               # e.g. Llama-3.1-8B-Instruct
+    precision: fp8
+    # link: https://huggingface.co/...
+  dataset:
+    name: CHANGEME               # e.g. cnn_dailymail
+    type: text
+  notes:
+    hardware: ""
+    software: ""

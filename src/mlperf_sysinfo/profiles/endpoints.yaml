@@ -1,0 +1,32 @@
+# Copyright 2026 MLCommons contributors
+# SPDX-License-Identifier: Apache-2.0
+name: endpoints
+title: MLPerf Endpoints
+round: "6.0"
+description: >-
+  Inference-serving endpoints. Keeps the multi-node structure in the output so
+  heterogeneous and disaggregated systems stay legible.
+
+output_file: system_desc.json
+shape: nested
+
+collect:
+  serving_log: true
+  endpoint_probe: true
+  redfish: true
+
+requires:
+  system.name: Identifier for the system under test
+  system.category: System category, e.g. datacenter or edge
+  system.availability: Availability status, e.g. available or preview
+  submission.submitter: Organisation making the submission
+  submission.contact: Contact email for questions about this submission
+  submission.division: Submission division, e.g. standardized or open
+  submission.model.name: Name of the model being served
+
+recommends:
+  system.accelerator: Without it, accelerators are not probed at all
+  serving.url: Enables framework and version detection from the live endpoint
+  serving.node: Enables parallelism and batch settings to be read from the startup log
+  submission.model.precision: Reviewers ask for this almost every round
+  submission.dataset.name: Identifies what the system was serving
