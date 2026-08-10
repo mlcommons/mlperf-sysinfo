@@ -108,6 +108,33 @@ result.complete      # False if any node did not answer
 `mlperf_sysinfo.check(config)` on its own to run the same validation early --
 at the start of a benchmark rather than at the end of one.
 
+## Exit codes
+
+`check` is meant to be scriptable, so the codes are a contract:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | All good |
+| 1 | The run found problems (missing fields, unreachable nodes, invalid file) |
+| 2 | The command or the config was wrong |
+
+## Where files land
+
+The deliverable is the only thing written to `output.dir`. Everything the
+automation produces -- the raw intermediate, per-node files, and its log --
+goes into `output.dir/.mlperf-sysinfo/`. Pass `--verbose` to see the automation
+log on the terminal instead of in that directory.
+
+Two caveats worth knowing:
+
+- **Credentials can be echoed by the collection layer.** Keeping them in
+  `${VAR}` keeps them out of your config file and out of git, but the
+  underlying automation prints its own command lines, so a Redfish password may
+  appear in `automation.log`. Treat that directory as sensitive.
+- **Remote scratch files are not confined.** When collecting over SSH, the
+  automation writes its own temporary files on each remote node (under `$HOME`
+  and `/tmp` there). This package cannot redirect those.
+
 ## Partial captures
 
 An unreachable node stops the run. `--allow-partial` proceeds anyway, and the
