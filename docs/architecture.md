@@ -40,6 +40,11 @@ returns the same grouped intermediate, and the profile decides the rest.
 | `cli.py` / `ui.py` | The command line and its rendering |
 | `errors.py` | Every deliberate failure is one of these |
 
+The `mlc-scripts` dependency is pinned to an exact pre-release, `1.2.0a1`, which
+is the version this package is tested against. `pip` installs it without any
+flag because the specifier names the pre-release explicitly; `uv` needs
+`prerelease = "allow"`, which `pyproject.toml` already sets.
+
 ## What a capture actually does
 
 ```mermaid

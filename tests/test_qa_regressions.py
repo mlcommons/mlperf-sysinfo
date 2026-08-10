@@ -240,3 +240,30 @@ class TestGroupsCheckedEarly:
         data["nodes"]["groups"] = {"prefill": [{"match": "NVIDIA H100", "count": 2}]}
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         assert run_check(cfg, endpoints_profile).ok
+
+
+class TestCollectionProvenance:
+    """mlc-scripts 1.2.0a1 runs from the installed package, so there is no git
+    checkout to stamp. The output must still say what collected it."""
+
+    def test_git_checkout_version_is_preserved(self, good_config_file, collected):
+        from mlperf_sysinfo.output import _collection_provenance
+
+        assert _collection_provenance(collected)["commit"] == "abc123"
+
+    def test_falls_back_to_the_installed_release(self):
+        from mlperf_sysinfo.output import _collection_provenance
+
+        block = _collection_provenance({"node_types": []})
+        assert "package_version" in block
+        assert block["package_version"]
+
+    def test_output_always_records_something(
+        self, good_config_file, endpoints_profile, all_reachable, monkeypatch, collected
+    ):
+        no_version = copy.deepcopy(collected)
+        no_version.pop("mlc_scripts_version")
+        monkeypatch.setattr(capture_mod, "_require_mlc", lambda: _FakeMlc(no_version))
+        result = capture(load_config(good_config_file), endpoints_profile)
+        stamp = json.loads(result.output_path.read_text())["mlperf_sysinfo"]
+        assert stamp["mlc_scripts"], "a capture must always record its collection version"

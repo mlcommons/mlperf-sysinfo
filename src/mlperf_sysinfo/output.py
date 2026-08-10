@@ -348,10 +348,27 @@ def provenance(
             "PARTIAL CAPTURE -- one or more nodes did not answer. "
             "This file does not describe the whole system."
         )
-    mlc_version = collected.get("mlc_scripts_version")
-    if mlc_version:
-        block["mlc_scripts"] = mlc_version
+    block["mlc_scripts"] = _collection_provenance(collected)
     return block
+
+
+def _collection_provenance(collected: dict) -> dict:
+    """Record which collection code produced this file.
+
+    A git checkout stamps its own commit into the intermediate. Since
+    mlc-scripts 1.2.0a1 the automations run from the installed package, where
+    there is no repo to read, so fall back to the release version -- which
+    answers the same question and is more precise for a pip install.
+    """
+    from_repo = collected.get("mlc_scripts_version")
+    if from_repo:
+        return from_repo
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        return {"package_version": version("mlc-scripts")}
+    except (ImportError, PackageNotFoundError):  # pragma: no cover
+        return {}
 
 
 def shape(

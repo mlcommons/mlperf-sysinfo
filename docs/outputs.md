@@ -39,7 +39,23 @@ This is what makes a captured file self-describing:
 | `profile` + `profile_round` | Which rules produced this file. Profiles track the current round, so the file records which round that was |
 | `nodes_expected` / `nodes_collected` | What was asked for versus what answered |
 | `complete` | `false` means a partial capture. `validate` refuses these |
-| `mlc_scripts.consistent` | Whether every node ran the same version of the collection scripts. A mixed-version run stays visible instead of hidden |
+| `mlc_scripts` | Which collection code produced the file |
+
+### Two forms of `mlc_scripts`
+
+The collection layer can run either from a git checkout or from the installed
+package, so the stamp takes whichever form applies:
+
+```json
+"mlc_scripts": { "package_version": "1.2.0a1" }
+```
+
+That is what a `pip install` produces — `mlc-scripts` runs from the installed
+release and there is no repository to read a commit from.
+
+A git checkout stamps the commit instead, plus a per-node breakdown and a
+`consistent` flag showing whether every node ran the same version. A
+mixed-version run stays visible rather than hidden.
 
 ---
 
