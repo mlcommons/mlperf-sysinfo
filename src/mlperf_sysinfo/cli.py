@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Annotated
 
 import cyclopts
+from cyclopts.exceptions import CycloptsError
 
 from . import __version__, ui
 from .collector import capture as run_capture
@@ -119,6 +120,7 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
             + report.placeholder_required
             + report.missing_recommended
             + report.placeholder_recommended
+            + report.placeholder_other
         )
     ] + report.unresolved_env
     fwidth = max((len(x) for x in field_labels), default=20) + 2
@@ -132,6 +134,11 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
         ui.row(ui.BAD, path, ui.red("placeholder"), f"still the starter value -- {why}", fwidth)
     for ref in report.unresolved_env:
         ui.row(ui.BAD, ref, ui.red("unset"), "not found in the environment", fwidth)
+
+    if report.placeholder_other:
+        ui.heading("still starter text")
+        for path, value in report.placeholder_other:
+            ui.row(ui.BAD, path, ui.red("placeholder"), repr(value), fwidth)
 
     if report.missing_recommended or report.placeholder_recommended:
         ui.heading("worth filling in")
@@ -259,6 +266,7 @@ def capture(
             allow_partial=allow_partial,
             run_metadata_path=run_metadata,
             progress=progress,
+            verbose=verbose,
         )
     except CheckFailed as e:
         if e.report is not None:
@@ -376,10 +384,18 @@ def profiles_cmd() -> int:
 
 
 def main() -> None:
-    """Entry point. Every deliberate failure exits 2 with one clear line."""
+    """Entry point.
+
+    The exit codes are a contract, because ``check`` is meant to be scriptable:
+    0 all good, 1 the run found problems, 2 the command or config was wrong.
+    A mistyped flag must not look like a failed check.
+    """
     try:
-        code = app()
+        code = app(exit_on_error=False)
     except SysinfoError as e:
+        ui.error(str(e))
+        sys.exit(EXIT_ERROR)
+    except CycloptsError as e:
         ui.error(str(e))
         sys.exit(EXIT_ERROR)
     except KeyboardInterrupt:  # pragma: no cover

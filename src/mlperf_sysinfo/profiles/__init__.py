@@ -82,7 +82,14 @@ def _load_file(path: Path) -> Profile:
     try:
         return Profile.model_validate(raw)
     except ValidationError as e:
-        raise ProfileError(f"{path}: not a valid profile:\n{e}") from e
+        lines = [f"{path}: not a valid profile"]
+        for err in e.errors():
+            loc = ".".join(str(part) for part in err["loc"]) or "(root)"
+            message = err["msg"]
+            if err["type"] == "extra_forbidden":
+                message = "unknown profile option -- check the spelling"
+            lines.append(f"  {loc}: {message}")
+        raise ProfileError("\n".join(lines)) from e
 
 
 def load(ref: str, *, relative_to: Path | None = None) -> Profile:

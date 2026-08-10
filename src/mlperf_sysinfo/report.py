@@ -12,13 +12,11 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config import find_placeholders
 from .errors import ConfigError
 from .output import output_key_for
 from .profiles import Profile
 from .profiles import load as load_profile
-
-#: Text the old pipeline used to write when nobody filled a field in.
-PLACEHOLDER_MARKERS = ("insert ", "your organization name", "insert a contact")
 
 
 @dataclass
@@ -86,11 +84,10 @@ def validate(path: str | Path, *, profile_name: str | None = None) -> Validation
         if value is None or (isinstance(value, str) and not value.strip()):
             report.problems.append(f"{key} is empty -- {why}")
 
-    for key, value in data.items():
-        if isinstance(value, str):
-            lowered = value.lower()
-            if any(marker in lowered for marker in PLACEHOLDER_MARKERS):
-                report.problems.append(f"{key} still holds placeholder text: {value!r}")
+    # The whole document, not just the top level: for the nested shape, the
+    # per-node metadata copied out of the config lives inside node_types.
+    for path, value in find_placeholders({k: v for k, v in data.items() if k != "mlperf_sysinfo"}):
+        report.problems.append(f"{path} still holds placeholder text: {value!r}")
 
     if profile.shape == "nested":
         node_types = data.get("node_types")

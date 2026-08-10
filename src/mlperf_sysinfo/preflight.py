@@ -20,7 +20,14 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-from .config import SshTarget, SysinfoConfig, dotted_get, is_filled, is_placeholder
+from .config import (
+    SshTarget,
+    SysinfoConfig,
+    dotted_get,
+    find_placeholders,
+    is_filled,
+    is_placeholder,
+)
 from .profiles import Profile
 
 SSH_TIMEOUT = 15
@@ -71,6 +78,7 @@ class CheckReport:
     placeholder_required: list[tuple[str, str]] = field(default_factory=list)
     missing_recommended: list[tuple[str, str]] = field(default_factory=list)
     placeholder_recommended: list[tuple[str, str]] = field(default_factory=list)
+    placeholder_other: list[tuple[str, str]] = field(default_factory=list)
     unresolved_env: list[str] = field(default_factory=list)
     satisfied_count: int = 0
     network_checked: bool = True
@@ -79,6 +87,7 @@ class CheckReport:
     def config_problems(self) -> list[str]:
         out = [f"missing  {path}" for path, _ in self.missing_required]
         out += [f"placeholder  {path}" for path, _ in self.placeholder_required]
+        out += [f"placeholder  {path}" for path, _ in self.placeholder_other]
         out += [f"unset environment variable at {ref}" for ref in self.unresolved_env]
         return out
 
@@ -88,7 +97,12 @@ class CheckReport:
 
     @property
     def has_config_problems(self) -> bool:
-        return bool(self.missing_required or self.placeholder_required or self.unresolved_env)
+        return bool(
+            self.missing_required
+            or self.placeholder_required
+            or self.placeholder_other
+            or self.unresolved_env
+        )
 
     @property
     def has_reach_problems(self) -> bool:
@@ -239,6 +253,27 @@ def run_check(
             report.placeholder_recommended.append((path, why))
         elif not is_filled(value):
             report.missing_recommended.append((path, why))
+
+    # Every remaining string, not just the ones a profile happens to name. A
+    # placeholder in an unrequired field still reaches the submission file.
+    already = {p for p, _ in report.placeholder_required + report.placeholder_recommended}
+    for path, value in find_placeholders(config.model_dump(exclude={"source_path"})):
+        if path not in already:
+            report.placeholder_other.append((path, value))
+
+    if config.nodes.groups:
+        declared = sum(
+            entry.count for entries in config.nodes.groups.values() for entry in entries
+        )
+        available = len(config.nodes.ssh) + (1 if config.nodes.include_local else 0)
+        if declared > available:
+            report.missing_required.append(
+                (
+                    "nodes.groups",
+                    f"declares {declared} node(s) but only {available} are configured -- "
+                    f"add SSH targets or lower the counts",
+                )
+            )
 
     if profile.collect.redfish and config.power.redfish is not None:
         rf = config.power.redfish

@@ -26,11 +26,6 @@ from .errors import ConfigError
 _SSH_RE = re.compile(r"^(?P<user>[^@\s]+)@(?P<host>[^:\s]+)(?::(?P<port>\d+))?$")
 _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
-#: Interpolated values that came from these config paths are secrets and are
-#: never echoed back to the terminal or written into an output file.
-SECRET_PATHS = frozenset({"power.redfish.username", "power.redfish.password"})
-
-
 def interpolate_env(value: Any, *, path: str = "", missing: list[str] | None = None) -> Any:
     """Recursively replace ``${VAR}`` with the environment's value.
 
@@ -90,17 +85,43 @@ def dotted_get(data: Any, path: str) -> Any:
 
 
 #: Text that means "nobody has filled this in yet". A starter config is full of
-#: the first one; the pre-mlperf-sysinfo pipeline wrote the others into real
-#: submission files when a field was left unset.
-PLACEHOLDER_TOKENS = ("changeme", "insert ", "your organization name", "<your")
+#: CHANGEME; the pre-mlperf-sysinfo pipeline wrote "Insert ... here" into real
+#: submission files whenever a field was left unset.
+#:
+#: The "insert" rule is anchored rather than a bare substring so that genuine
+#: free text -- "insert card in slot 3" in a hardware note -- is not mistaken
+#: for an unfilled field.
+PLACEHOLDER_TOKENS = ("changeme",)
+_PLACEHOLDER_RE = re.compile(r"^(insert\b.*\bhere|<.*>)$", re.IGNORECASE)
 
 
 def is_placeholder(value: Any) -> bool:
     """True when a value is present but is still starter text."""
     if not isinstance(value, str):
         return False
-    lowered = value.strip().lower()
-    return any(token in lowered for token in PLACEHOLDER_TOKENS)
+    stripped = value.strip()
+    lowered = stripped.lower()
+    if any(token in lowered for token in PLACEHOLDER_TOKENS):
+        return True
+    return bool(_PLACEHOLDER_RE.match(stripped))
+
+
+def find_placeholders(data: Any, *, path: str = "") -> list[tuple[str, str]]:
+    """Walk any nested structure and return every (path, value) still unfilled.
+
+    Used on the whole config -- a placeholder in a field no profile happens to
+    require still ends up in a submission file.
+    """
+    found: list[tuple[str, str]] = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            found += find_placeholders(value, path=f"{path}.{key}" if path else str(key))
+    elif isinstance(data, list):
+        for i, value in enumerate(data):
+            found += find_placeholders(value, path=f"{path}[{i}]")
+    elif is_placeholder(data):
+        found.append((path or "(root)", data.strip()))
+    return found
 
 
 def is_filled(value: Any) -> bool:
@@ -380,9 +401,11 @@ def _read_yaml(path: Path) -> dict:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
     try:
-        raw = yaml.safe_load(path.read_text()) or {}
+        raw = yaml.safe_load(path.read_text())
     except yaml.YAMLError as e:
         raise ConfigError(f"{path}: invalid YAML: {e}") from e
+    if raw is None:
+        raw = {}
     if not isinstance(raw, dict):
         raise ConfigError(f"{path}: expected a YAML mapping, got {type(raw).__name__}")
     return raw

@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -29,7 +31,43 @@ from .profiles import Profile
 from .profiles import load as load_profile
 
 #: Grouped intermediate written by the automation script before we shape it.
-RAW_FILENAME = ".mlperf-sysinfo-raw.json"
+RAW_FILENAME = "raw-system-info.json"
+
+#: Scratch directory inside the output directory. Everything the automation
+#: writes lands here so the deliverable sits on its own.
+WORK_DIRNAME = ".mlperf-sysinfo"
+
+#: Automation output that is a deliverable in its own right, lifted back out
+#: of the scratch directory on success.
+_KEEP_FILES = ("redfish_nameplate_power.yaml", "redfish_capture.yaml")
+
+
+@contextmanager
+def _captured_output(log_path: Path, *, enabled: bool):
+    """Send the automation's chatter to a log file instead of the terminal.
+
+    It writes from subprocesses as well as Python, so this redirects the real
+    file descriptors rather than ``sys.stdout``.
+    """
+    if not enabled:
+        yield
+        return
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "w") as log:
+        saved_out, saved_err = os.dup(1), os.dup(2)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(log.fileno(), 1)
+            os.dup2(log.fileno(), 2)
+            yield
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(saved_out, 1)
+            os.dup2(saved_err, 2)
+            os.close(saved_out)
+            os.close(saved_err)
 
 Progress = Callable[[str, str, str], None]
 """Called as (symbol_key, label, detail) so the CLI owns all rendering."""
@@ -167,6 +205,7 @@ def capture(
     run_metadata_path: Path | None = None,
     progress: Progress | None = None,
     report: CheckReport | None = None,
+    verbose: bool = False,
 ) -> CaptureResult:
     """Check, collect, shape, write.
 
@@ -209,21 +248,41 @@ def capture(
     out_dir = config.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # The automation's own scratch -- raw intermediate, per-node files, and any
+    # relative paths it writes -- is kept out of the directory the submitter
+    # will copy from.
+    work_dir = out_dir / WORK_DIRNAME
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    # A leftover intermediate from an earlier run must never be mistaken for
+    # this run's result: if the automation reports success but writes nothing,
+    # we have to notice rather than shape stale hardware into a fresh file.
+    stale = work_dir / RAW_FILENAME
+    if stale.exists():
+        stale.unlink()
+
     node_config_file = _write_node_config(config) if config.nodes.groups else None
     mlc_kwargs = build_mlc_kwargs(
         config,
         profile,
-        out_dir,
+        work_dir,
         node_config_file=node_config_file,
         run_metadata_path=run_metadata_path,
     )
 
     mlc = _require_mlc()
+    log_path = work_dir / "automation.log"
+    previous_cwd = os.getcwd()
     try:
-        result = mlc.access(mlc_kwargs)
+        os.chdir(work_dir)
+        with _captured_output(log_path, enabled=not verbose):
+            result = mlc.access(mlc_kwargs)
     except Exception as e:  # the automation layer raises a variety of types
-        raise CaptureError(f"collection failed: {type(e).__name__}: {e}") from e
+        raise CaptureError(
+            f"collection failed: {type(e).__name__}: {e}\n  See {log_path}"
+        ) from e
     finally:
+        os.chdir(previous_cwd)
         if node_config_file and os.path.exists(node_config_file):
             os.unlink(node_config_file)
 
@@ -236,7 +295,7 @@ def capture(
         if not node.reachable:
             emit("bad", node.label, f"skipped -- {node.detail}")
 
-    raw_path = _locate_raw(result, out_dir)
+    raw_path = _locate_raw(result, work_dir)
     try:
         collected = json.loads(raw_path.read_text())
     except (OSError, ValueError) as e:
@@ -253,13 +312,13 @@ def capture(
         raise CaptureError(
             "collection returned no hardware at all. "
             f"{nodes_expected} node(s) were asked; none reported back. "
-            f"Re-run with --verbose to see the automation log ({raw_path})."
+            f"See the automation log at {log_path}."
         )
     if nodes_collected < nodes_expected:
         if not allow_partial:
             raise CaptureError(
                 f"only {nodes_collected} of {nodes_expected} node(s) returned hardware. "
-                "Re-run with --verbose to see which probe failed, or pass "
+                f"See {log_path} for which probe failed, or pass "
                 "--allow-partial to write what was collected."
             )
         partial = True
@@ -292,7 +351,13 @@ def capture(
     output_path = out_dir / (config.output.file or profile.output_file)
     output_path.write_text(json.dumps(final, indent=2) + "\n")
 
-    extra = [p for p in (out_dir / "redfish_nameplate_power.yaml", out_dir / "redfish_capture.yaml") if p.exists()]
+    extra: list[Path] = []
+    for name in _KEEP_FILES:
+        produced = work_dir / name
+        if produced.exists():
+            destination = out_dir / name
+            produced.replace(destination)
+            extra.append(destination)
 
     return CaptureResult(
         output_path=output_path,
@@ -330,5 +395,5 @@ def _locate_raw(result: dict, out_dir: Path) -> Path:
         return fallback
     raise CaptureError(
         "collection reported success but wrote no data -- "
-        f"expected {fallback}. Re-run with --verbose to see the automation log."
+        f"expected {fallback}. See the automation log alongside it."
     )

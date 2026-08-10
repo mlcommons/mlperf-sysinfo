@@ -78,35 +78,45 @@ def is_not_detected(val: Any) -> bool:
             return True
         if val in _NOT_DETECTED:
             return True
-        if val.strip().lstrip("-").isdigit():
-            return True
     return False
+
+
+def name_not_detected(val: Any) -> bool:
+    """As above, for fields that should hold a *name*.
+
+    A bare number in a model-name field means the driver handed back a device
+    index instead of a name. That rule must not be applied to counts, where a
+    number is the correct answer.
+    """
+    if is_not_detected(val):
+        return True
+    return isinstance(val, str) and val.strip().lstrip("-").isdigit()
+
+
+def _as_int(value: Any, default: int = 1) -> int:
+    """Counts arrive as ints today and strings tomorrow. Never multiply a str."""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
 
 
 def compute_system_size(node_entries: list[dict]) -> str:
     """Per the MLPerf Per Submission Data Dictionary: '8x NVIDIA H100 + 2x ...'."""
     parts: list[str] = []
     for entry in node_entries:
-        n_nodes = entry.get("number_of_nodes", 1)
+        n_nodes = _as_int(entry.get("number_of_nodes", 1))
         accel_name = entry.get("accelerator_model_name", "")
         accel_per_node = entry.get("accelerators_per_node", 0)
 
-        if not is_not_detected(accel_name) and not is_not_detected(accel_per_node):
-            try:
-                qty = n_nodes * int(accel_per_node)
-            except (ValueError, TypeError):
-                qty = n_nodes
-            parts.append(f"{qty}x {accel_name}")
+        if not name_not_detected(accel_name) and not is_not_detected(accel_per_node):
+            parts.append(f"{n_nodes * _as_int(accel_per_node)}x {accel_name}")
             continue
 
         cpu_name = entry.get("host_processor_model_name", "")
         cpu_per_node = entry.get("host_processors_per_node", 1)
-        if not is_not_detected(cpu_name):
-            try:
-                qty = n_nodes * int(cpu_per_node)
-            except (ValueError, TypeError):
-                qty = n_nodes
-            parts.append(f"{qty}x {cpu_name}")
+        if not name_not_detected(cpu_name):
+            parts.append(f"{n_nodes * _as_int(cpu_per_node)}x {cpu_name}")
     return " + ".join(parts)
 
 
@@ -192,6 +202,12 @@ def build_nested(collected: dict, config: SysinfoConfig) -> dict:
         "input_token_average": _s(sub.dataset.input_token_average),
         "output_token_average": _s(sub.dataset.output_token_average),
         "measured_accuracy_score": _s(sub.measured_accuracy_score),
+        "hw_notes": _s(sub.notes.hardware),
+        "sw_notes": _s(sub.notes.software),
+        "other_hardware": _s(sub.notes.other_hardware),
+        "cooling": _s(config.system.cooling),
+        "container_link": _s(sub.container_link),
+        "system_type_detail": _s(config.system.type_detail),
     }
 
 
