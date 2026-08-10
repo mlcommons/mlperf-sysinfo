@@ -64,7 +64,7 @@ collected and nothing is written.
 $ mlperf-sysinfo check -c sysinfo.yaml
 
   profile    endpoints (v6.0 rules)
-  output     /data/common/anandhu/verify/out/system_desc.json
+  output     results/h100_run1/system_desc.json
 
 NODES
   ✓ this machine   included
@@ -86,7 +86,7 @@ submission file.
 $ mlperf-sysinfo check -c ph.yaml
 
   profile    endpoints (v6.0 rules)
-  output     /data/common/anandhu/verify/out_ph/system_desc.json
+  output     results/h100_run1/system_desc.json
 
 NODES
   ✓ this machine   included
@@ -145,9 +145,9 @@ $ mlperf-sysinfo capture -c sysinfo.yaml
 
   1 node(s) - 8 accelerators - profile endpoints
 
-  Written  /data/common/anandhu/sysinfo-qa/verify/out/system_desc.json
+  Written  results/h100_run1/system_desc.json
 
-  Next: mlperf-sysinfo show .../out/system_desc.json
+  Next: mlperf-sysinfo show results/h100_run1/system_desc.json
 ```
 
 ### Options
@@ -205,9 +205,9 @@ deliberate: it shows at a glance what the tool found versus what a person
 asserted.
 
 ```console
-$ mlperf-sysinfo show out_inf/system_desc.json
+$ mlperf-sysinfo show results/h100_run1/system_desc.json
 
-  system       mlc2_H100x8
+  system       H100x8
   profile      inference (v6.0 rules)
   captured     2026-08-10T14:08:36+00:00
   size         8x NVIDIA H100 80GB HBM3
@@ -222,8 +222,8 @@ DETECTED
   software       CUDA 12.9, Driver 575.57.08
 
 FROM YOUR CONFIG
-  submitter      MLCommons
-  contact        qa@example.org
+  submitter      MyOrg
+  contact        mlperf@myorg.example
   division       closed
   system type    datacenter
   status         available
@@ -244,9 +244,9 @@ non-empty, sweeps the **whole document** for placeholder text — including
 inside `node_types` — and refuses a partial capture.
 
 ```console
-$ mlperf-sysinfo validate out_inf/system_desc.json
+$ mlperf-sysinfo validate results/h100_run1/system_desc.json
 
-  file       out_inf/system_desc.json
+  file       results/h100_run1/system_desc.json
   profile    inference (v6.0 rules)
 
   Valid. 6 required field(s) present.

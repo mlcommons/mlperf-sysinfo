@@ -40,9 +40,9 @@ $ mlperf-sysinfo capture -c sysinfo.yaml
 
   1 node(s) - 8 accelerators - profile endpoints
 
-  Written  /data/common/anandhu/sysinfo-qa/verify/out/system_desc.json
+  Written  results/h100_run1/system_desc.json
 
-  Next: mlperf-sysinfo show .../out/system_desc.json
+  Next: mlperf-sysinfo show results/h100_run1/system_desc.json
 ```
 
 ## Three rules worth knowing

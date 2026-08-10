@@ -50,12 +50,12 @@ entry per node type, each with its own hardware and a `number_of_nodes` count.
 
 ```json
 {
-  "submitter_org_names": "MLCommons",
-  "submitter_contact": "qa@example.org",
+  "submitter_org_names": "MyOrg",
+  "submitter_contact": "mlperf@myorg.example",
   "submission_id": "",
   "submission_date": "",
   "publish_date": "",
-  "system_name": "mlc2_H100x8",
+  "system_name": "H100x8",
   "system_category": "datacenter",
   "system_availability_status": "available",
   "system_size": "8x NVIDIA H100 80GB HBM3",
@@ -122,9 +122,9 @@ hardware lifted to the top level and renamed to the checker's names.
 
 ```json
 {
-  "submitter": "MLCommons",
-  "submitter_contact": "qa@example.org",
-  "system_name": "mlc2_H100x8",
+  "submitter": "MyOrg",
+  "submitter_contact": "mlperf@myorg.example",
+  "system_name": "H100x8",
   "status": "available",
   "system_type": "datacenter",
   "division": "closed",
