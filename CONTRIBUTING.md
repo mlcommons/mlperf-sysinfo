@@ -4,6 +4,7 @@
 uv venv && uv pip install -e ".[dev]"
 uv run pytest -q
 uv run ruff check .
+uv run --extra docs mkdocs serve   # docs at http://127.0.0.1:8000
 ```
 
 ## Adding a profile

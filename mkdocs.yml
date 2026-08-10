@@ -1,0 +1,71 @@
+site_name: mlperf-sysinfo
+site_description: Capture MLPerf system descriptions - one config format, one CLI, per-working-group profiles.
+site_url: https://anandhu-eng.github.io/mlperf-sysinfo/
+repo_url: https://github.com/anandhu-eng/mlperf-sysinfo
+repo_name: anandhu-eng/mlperf-sysinfo
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  icon:
+    logo: material/server-network
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - The config file: configuration.md
+  - Commands: commands.md
+  - Sample outputs: outputs.md
+  - Profiles: profiles.md
+  - Embedding it: embedding.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/anandhu-eng/mlperf-sysinfo
+
+copyright: Apache-2.0

@@ -8,6 +8,8 @@ Collection is done by [mlc-scripts](https://github.com/mlcommons/mlperf-automati
 This package owns everything a person touches: the config, the checks, the
 errors, and the shape of the result.
 
+**Documentation: <https://anandhu-eng.github.io/mlperf-sysinfo/>**
+
 ```bash
 pip install mlperf-sysinfo
 ```
