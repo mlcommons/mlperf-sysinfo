@@ -32,9 +32,14 @@ jobs:
         with:
           path: site/
 
+  # Deploying is opt-in: GitHub Pages is unavailable for private repositories
+  # on some plans, and a permanently red job teaches people to ignore CI.
+  # To turn it on: make the repo public (or upgrade), set Settings -> Pages
+  # -> Source to "GitHub Actions", then add a repository variable
+  # ENABLE_PAGES = true. The build job above runs either way.
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.ENABLE_PAGES == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write
