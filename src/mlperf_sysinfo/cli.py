@@ -69,7 +69,8 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
     ui.kv("profile", f"{ui.bold(profile.name)} {ui.dim(f'(v{profile.round} rules)')}")
     ui.kv("output", str(out_file))
 
-    labels = [n.label for n in report.nodes] + config.nodes.ssh + ["this machine"]
+    all_targets = [str(t) for t in config.all_targets]
+    labels = [n.label for n in report.nodes] + all_targets + ["this machine"]
     if report.endpoint:
         labels.append(report.endpoint.label)
     if report.serving_log:
@@ -78,7 +79,7 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
 
     ui.heading("nodes")
     if not report.network_checked:
-        for raw in config.nodes.ssh:
+        for raw in all_targets:
             ui.row(ui.SKIP, raw, ui.dim("not checked"), "--offline was passed", width)
     for node in report.nodes:
         if node.reachable:
@@ -182,8 +183,11 @@ _SYMBOLS = {"ok": ui.OK, "bad": ui.BAD, "warn": ui.WARN, "skip": ui.SKIP}
 def init(
     profile: str = "endpoints",
     *,
-    output: Annotated[
-        Path, cyclopts.Parameter(name=["--output", "-o"], help="Where to write the config.")
+    path: Annotated[
+        Path,
+        cyclopts.Parameter(
+            name=["--path"], help="Where to write the config. Defaults to sysinfo.yaml in the current directory."
+        ),
     ] = Path("sysinfo.yaml"),
     force: Annotated[
         bool, cyclopts.Parameter(help="Overwrite the file if it already exists.")
@@ -197,21 +201,20 @@ def init(
             f"Built-in profiles: {', '.join(available_profiles())}"
         )
         return EXIT_ERROR
-    if output.exists() and not force:
-        ui.error(f"{output} already exists. Pass --force to overwrite it.")
+    if path.exists() and not force:
+        ui.error(f"{path} already exists. Pass --force to overwrite it.")
         return EXIT_ERROR
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(template, output)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(template, path)
 
     loaded = load_profile(profile)
     ui.blank()
-    print(f"  {ui.green('Written')} {output}")
+    print(f"  {ui.green('Written')} template {path.name} to path: {path.resolve()}")
     ui.blank()
-    ui.hint(f"profile {loaded.name} -- {loaded.title}, round {loaded.round}")
-    ui.hint(f"{len(loaded.requires)} fields you must fill in; the rest is detected.")
+    ui.hint(f"profile: {loaded.name}")
     ui.blank()
-    ui.hint(f"Next: edit {output}, then run  mlperf-sysinfo check -c {output}")
+    ui.hint(f"Edit the template {path.name} before running the actual capture command.")
     return EXIT_OK
 
 

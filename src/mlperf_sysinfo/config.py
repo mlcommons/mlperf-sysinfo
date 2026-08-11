@@ -372,11 +372,23 @@ class SysinfoConfig(BaseModel):
     unresolved_env: list[str] = Field(default_factory=list, exclude=True)
 
     def model_post_init(self, _context: Any) -> None:
-        if not self.nodes.include_local and not self.nodes.ssh:
+        if not self.nodes.include_local and not self.nodes.ssh and not self.serving.node:
             raise ValueError(
                 "nothing to collect from: set nodes.include_local to true, "
-                "or list at least one target under nodes.ssh"
+                "list at least one target under nodes.ssh, or set serving.node"
             )
+
+    @property
+    def all_targets(self) -> list[SshTarget]:
+        """``nodes.ssh``, plus ``serving.node`` if it names a machine not
+        already in that list. A node only mentioned as where the server runs
+        is still part of the system and should be reached and collected."""
+        targets = list(self.nodes.targets)
+        if self.serving.node:
+            serving_target = SshTarget.parse(self.serving.node)
+            if serving_target not in targets:
+                targets.append(serving_target)
+        return targets
 
     @property
     def output_dir(self) -> Path:

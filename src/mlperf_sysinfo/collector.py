@@ -168,7 +168,7 @@ def build_mlc_kwargs(
         "action": "run",
         "automation": "script",
         "tags": ",".join(tags),
-        "ssh_ids": ",".join(str(t) for t in config.nodes.targets),
+        "ssh_ids": ",".join(str(t) for t in config.all_targets),
         "out_dir_path": str(out_dir.resolve()),
         "out_file_name": RAW_FILENAME,
         "skip_ssh_key_file": "yes" if config.nodes.ssh_key_preconfigured else "",
@@ -305,7 +305,7 @@ def capture(
     # and still return nothing -- an unsupported OS, a probe that needs sudo.
     # Believing the request over the result is how a capture silently ships
     # half a system.
-    nodes_expected = len(config.nodes.ssh) + (1 if config.nodes.include_local else 0)
+    nodes_expected = len(config.all_targets) + (1 if config.nodes.include_local else 0)
     nodes_collected = count_collected_nodes(collected)
 
     if nodes_collected == 0:

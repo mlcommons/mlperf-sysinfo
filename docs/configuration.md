@@ -97,8 +97,8 @@ submission:                        # the paperwork
 
 !!! note "Why `include_local` defaults to false"
     An orchestrator machine driving a cluster should not describe itself by
-    accident. A config with neither `include_local: true` nor any `ssh` entries
-    is rejected — there would be nothing to collect.
+    accident. A config with none of `include_local: true`, an `ssh` entry, or
+    a `serving.node` is rejected — there would be nothing to collect.
 
 ### `serving`
 
@@ -111,6 +111,10 @@ section entirely.
 | `node` | string | — | SSH target where the server process runs |
 | `log` | path | `/tmp/serving.log` | Startup log, parsed for parallelism and batch settings |
 | `framework` | enum | `auto` | `auto` \| `vllm` \| `sglang` \| `trtllm` |
+
+`node` does not have to also appear under `nodes.ssh`. If it names a machine
+not already listed there, it is still reached and its hardware still
+collected — listing it twice is not required.
 
 !!! warning "The serving log must actually exist"
     Server stdout/stderr has to be redirected to `serving.log` on that node.

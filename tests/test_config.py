@@ -121,6 +121,7 @@ class TestLoad:
     def test_nothing_to_collect_is_rejected(self, tmp_path):
         data = copy.deepcopy(GOOD_CONFIG)
         data["nodes"] = {"include_local": False, "ssh": []}
+        data["serving"] = {}
         p = write_yaml(tmp_path / "c.yaml", data)
         with pytest.raises(ConfigError, match="nothing to collect"):
             load_config(p)
@@ -130,6 +131,13 @@ class TestLoad:
         data["nodes"] = {"include_local": True, "ssh": []}
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         assert cfg.nodes.include_local
+
+    def test_serving_node_alone_is_allowed(self, tmp_path):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["nodes"] = {"include_local": False, "ssh": []}
+        data["serving"] = {"node": "root@node1"}
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert cfg.all_targets == [SshTarget(user="root", host="node1", port=22)]
 
     def test_bad_ssh_target_is_reported(self, tmp_path):
         data = copy.deepcopy(GOOD_CONFIG)
@@ -144,6 +152,32 @@ class TestLoad:
         p = write_yaml(tmp_path / "c.yaml", data)
         with pytest.raises(ConfigError, match="http"):
             load_config(p)
+
+
+class TestAllTargets:
+    """serving.node names a real node in the system, even when it is not
+    also listed under nodes.ssh. It should be reached and collected, not
+    just used for the startup-log check."""
+
+    def test_serving_node_already_in_ssh_is_not_duplicated(self, good_config_file):
+        cfg = load_config(good_config_file)
+        assert cfg.all_targets == cfg.nodes.targets
+
+    def test_serving_node_not_in_ssh_is_added(self, tmp_path):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["nodes"]["ssh"] = ["root@node1"]
+        data["serving"]["node"] = "root@node3"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert cfg.all_targets == [
+            SshTarget(user="root", host="node1", port=22),
+            SshTarget(user="root", host="node3", port=22),
+        ]
+
+    def test_no_serving_node_leaves_targets_unchanged(self, tmp_path):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["serving"] = {"url": "http://node1:8000"}
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert cfg.all_targets == cfg.nodes.targets
 
 
 class TestExtends:

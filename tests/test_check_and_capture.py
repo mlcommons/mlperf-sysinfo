@@ -100,6 +100,16 @@ class TestCheck:
         assert report.has_reach_problems
         assert len(report.unreachable) == 1
 
+    def test_serving_node_missing_from_ssh_is_still_reached(
+        self, tmp_path, endpoints_profile, all_reachable
+    ):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["nodes"]["ssh"] = ["root@node1"]
+        data["serving"]["node"] = "root@node3"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert {n.label for n in report.nodes} == {"root@node1:22", "root@node3:22"}
+
     def test_recommended_fields_only_warn(self, tmp_path, endpoints_profile, all_reachable):
         data = copy.deepcopy(GOOD_CONFIG)
         del data["submission"]["dataset"]
@@ -127,6 +137,16 @@ class TestMlcInvocation:
         cfg = load_config(good_config_file)
         kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
         assert kwargs["ssh_ids"] == "root@node1:22,root@node2:2222"
+
+    def test_ssh_ids_include_a_serving_node_missing_from_ssh(
+        self, endpoints_profile, tmp_path
+    ):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["nodes"]["ssh"] = ["root@node1"]
+        data["serving"]["node"] = "root@node3"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+        assert kwargs["ssh_ids"] == "root@node1:22,root@node3:22"
 
     def test_inference_profile_skips_serving_inputs(self, good_config_file, tmp_path):
         cfg = load_config(good_config_file)

@@ -27,21 +27,21 @@ must never look like a failed check.
 ## `init`
 
 ```bash
-mlperf-sysinfo init [PROFILE] [-o PATH] [--force]
+mlperf-sysinfo init [PROFILE] [--path PATH] [--force]
 ```
 
-`PROFILE` defaults to `endpoints`. Refuses to overwrite an existing file unless
-`--force` is passed.
+`PROFILE` defaults to `endpoints`. `--path` defaults to `sysinfo.yaml` in the
+current directory. Refuses to overwrite an existing file unless `--force` is
+passed.
 
 ```console
 $ mlperf-sysinfo init endpoints
 
-  Written sysinfo.yaml
+  Written template sysinfo.yaml to path: /home/user/sysinfo.yaml
 
-  profile endpoints -- MLPerf Endpoints, round 6.0
-  7 fields you must fill in; the rest is detected.
+  profile: endpoints
 
-  Next: edit sysinfo.yaml, then run  mlperf-sysinfo check -c sysinfo.yaml
+  Edit the template sysinfo.yaml before running the actual capture command.
 ```
 
 ---

@@ -265,7 +265,7 @@ def run_check(
         declared = sum(
             entry.count for entries in config.nodes.groups.values() for entry in entries
         )
-        available = len(config.nodes.ssh) + (1 if config.nodes.include_local else 0)
+        available = len(config.all_targets) + (1 if config.nodes.include_local else 0)
         if declared > available:
             report.missing_required.append(
                 (
@@ -286,7 +286,7 @@ def run_check(
         report.network_checked = False
         return report
 
-    targets = config.nodes.targets
+    targets = config.all_targets
     if targets:
         with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
             report.nodes = list(

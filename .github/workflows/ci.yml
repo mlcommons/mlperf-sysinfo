@@ -47,7 +47,7 @@ jobs:
         run: |
           uv run --python ${{ matrix.python-version }} mlperf-sysinfo --version
           uv run --python ${{ matrix.python-version }} mlperf-sysinfo profiles
-          uv run --python ${{ matrix.python-version }} mlperf-sysinfo init endpoints -o /tmp/s.yaml
+          uv run --python ${{ matrix.python-version }} mlperf-sysinfo init endpoints --path /tmp/s.yaml
           # A starter config is deliberately not capturable: exit 1 is correct.
           uv run --python ${{ matrix.python-version }} mlperf-sysinfo check -c /tmp/s.yaml --offline && exit 1 || true
 
