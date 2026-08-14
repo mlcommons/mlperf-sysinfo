@@ -19,7 +19,16 @@ Embedding it in another tool:
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+# Read from the installed distribution so this can never drift from
+# pyproject.toml -- the release workflow checks the tag against pyproject,
+# and a hand-maintained copy here would not be caught by that check.
+from importlib.metadata import PackageNotFoundError  # noqa: E402
+from importlib.metadata import version as _version  # noqa: E402
+
+try:
+    __version__ = _version("mlperf-sysinfo")
+except PackageNotFoundError:  # running from a source tree, not installed
+    __version__ = "0.0.0+unknown"
 
 from .config import SysinfoConfig, load_config  # noqa: E402
 from .errors import (  # noqa: E402

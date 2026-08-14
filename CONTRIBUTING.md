@@ -38,5 +38,14 @@ on the next release -- which is why profile changes get a careful review.
 
 ## Releasing
 
-Releases are gated. Tag `v<version>` matching `pyproject.toml`, push it, then
-approve the environment in the Actions tab. Tagging alone publishes nothing.
+Publishing to PyPI is driven by GitHub Releases, and it is gated:
+
+1. Bump `version` in `pyproject.toml` on `main`.
+2. Draft a GitHub Release on a `v<version>` tag and publish it.
+3. Approve the `pypi` environment in the Actions tab.
+
+A draft release publishes nothing, and neither does a tag on its own. The
+build re-runs the full test suite and fails if the release tag disagrees with
+`pyproject.toml`, so the version on PyPI always matches a tag you can check
+out. The sdist and wheel are attached to the release once the upload
+succeeds.

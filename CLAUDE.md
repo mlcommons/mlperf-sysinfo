@@ -15,9 +15,11 @@ uv run --extra docs mkdocs build --strict  # what CI runs; fails on a broken lin
 
 CI (`.github/workflows/ci.yml`) runs ruff, pytest, a CLI smoke test (`init` →
 `check --offline`), and a `uv build` + `twine check` across Python 3.10-3.13.
-Releasing is tag-driven and gated behind a manually-approved GitHub
-Environment (`git tag v<version> && git push origin v<version>`, matching
-`pyproject.toml`'s version) — tagging alone publishes nothing.
+Releasing (`.github/workflows/release.yml`) is driven by *published* GitHub
+Releases: publishing a release on a `v<version>` tag that matches
+`pyproject.toml` runs the tests, then uploads to PyPI once the `pypi`
+Environment is manually approved. A draft release or a bare tag publishes
+nothing.
 
 ## Architecture
 
