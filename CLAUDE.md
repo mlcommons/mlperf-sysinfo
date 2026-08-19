@@ -55,6 +55,8 @@ profile and no collection change.
 | `report.py` | Reads a captured file back on its own — `show` and `validate` |
 | `cli.py` / `ui.py` | The `mlperf-sysinfo` command line (cyclopts) and its terminal rendering |
 | `errors.py` | Every deliberate failure is one of `SysinfoError`'s subclasses |
+| `runlog.py` | The per-run log file: header, one stamp per line, footer |
+| `logs.py` | Leveled logging of this package's own actions, to the terminal and into the run log |
 | `suggest.py` | "Did you mean ...?" for config options, profile names and flags |
 
 ### Config and profiles
@@ -94,6 +96,28 @@ profile and no collection change.
   to the terminal: with nothing to choose, showing it on every line is noise
   that also implies there is a choice.
 
+### Logging
+
+Two streams, and the split matters. The styled blocks (`ui.py`) are the
+*summary* a person acts on. `logs.py` is the *trace* of what the tool did --
+`log = logs.get(__name__)` in each module, so a line reads
+`[2026-08-19 20:47:33] INFO     preflight: ...`.
+
+- **Levels are chosen for severity, not for the CLI.** An unreachable node is a
+  WARNING because a library caller has `run_check()` and no styled report to
+  read it from.
+- **The CLI's terminal default is therefore `error`**, not `warning`: it *does*
+  render a styled report, and every warning a check produces appears in it, so
+  a WARNING threshold printed each one twice in two formats a few lines apart.
+  `--log-level info|debug` (or `--verbose`) opens it up.
+- **The run log file always takes every level**, whatever the terminal shows.
+  Records logged before the file exists are buffered and replayed into it.
+- `setup()` sets `propagate = False`, so an embedder that never calls it still
+  sees these records through its own root handlers -- but when this package owns
+  the terminal, nothing is printed twice.
+- New log calls must not restate what a styled block already prints at a
+  terminal-visible level. That is the one rule this layer can break invisibly.
+
 ### Two kinds of problem, handled differently
 
 This distinction is the core of `check`/`capture`'s design:
@@ -123,7 +147,7 @@ back out into `output.dir`.
 
 - Credentials kept in `${VAR}` stay out of the config file and git, but the
   underlying automation prints its own command lines, so a Redfish password
-  can still end up in `.mlperf-sysinfo/automation.log`.
+  can still end up in the run log under `.mlperf-sysinfo/`.
 - Remote scratch files from SSH collection are not confined — the automation
   writes its own temp files under `$HOME`/`/tmp` on each remote node, and this
   package's environment doesn't propagate over that SSH leg to redirect them.

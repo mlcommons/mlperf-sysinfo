@@ -16,8 +16,11 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from .. import logs
 from ..errors import ProfileError
 from ..suggest import did_you_mean, options_at
+
+log = logs.get(__name__)
 
 _BUILTIN_DIR = Path(__file__).parent
 

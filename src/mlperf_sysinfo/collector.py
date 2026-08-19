@@ -13,23 +13,24 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
 import time
 from collections.abc import Callable
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from . import __version__
+from . import __version__, logs
 from .config import SysinfoConfig
 from .errors import CaptureError, CheckFailed, DependencyMissing
 from .preflight import CheckReport, NodeStatus, run_check
 from .profiles import Profile
 from .profiles import load as load_profile
+from .runlog import RunLog
+
+log = logs.get(__name__)
 
 #: Grouped intermediate written by the automation script before we shape it.
 RAW_FILENAME = "raw-system-info.json"
@@ -42,33 +43,6 @@ WORK_DIRNAME = ".mlperf-sysinfo"
 #: of the scratch directory on success.
 _KEEP_FILES = ("redfish_nameplate_power.yaml", "redfish_capture.yaml")
 
-
-@contextmanager
-def _captured_output(log_path: Path, *, enabled: bool):
-    """Send the automation's chatter to a log file instead of the terminal.
-
-    It writes from subprocesses as well as Python, so this redirects the real
-    file descriptors rather than ``sys.stdout``.
-    """
-    if not enabled:
-        yield
-        return
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "w") as log:
-        saved_out, saved_err = os.dup(1), os.dup(2)
-        try:
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os.dup2(log.fileno(), 1)
-            os.dup2(log.fileno(), 2)
-            yield
-        finally:
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os.dup2(saved_out, 1)
-            os.dup2(saved_err, 2)
-            os.close(saved_out)
-            os.close(saved_err)
 
 Progress = Callable[[str, str, str], None]
 """Called as (symbol_key, label, detail) so the CLI owns all rendering."""
@@ -85,6 +59,9 @@ class CaptureResult:
     complete: bool = True
     raw_path: Path | None = None
     extra_files: list[Path] = field(default_factory=list)
+    #: The run log for this capture. Named after the start time, so a retry
+    #: leaves the log of the failure that prompted it in place.
+    log_path: Path | None = None
     duration: float = 0.0
     #: Nodes that actually returned hardware, counted from the collected data
     #: rather than from what we asked for. These are not the same thing.
@@ -103,6 +80,30 @@ class CaptureResult:
         # A flat capture has no node_types -- its hardware is the top level, so
         # the whole document is the one "node type" to count.
         return accelerator_count(data.get("node_types") or [data])
+
+
+def _log_details(
+    config: SysinfoConfig, profile: Profile, report: CheckReport, out_file: Path
+) -> dict[str, str]:
+    """The run log's header: enough to reconstruct what this run was asked for.
+
+    The round belongs here even though it is never printed to the terminal. It
+    is stamped into every output file for the same reason -- a log read weeks
+    later has to say which rules produced it.
+    """
+    # report.nodes holds only the SSH targets -- the local machine is implicit,
+    # and leaving it out here once read as "Nodes: 0" on a single-box capture.
+    labels = ["this machine"] if config.nodes.include_local else []
+    labels += [
+        node.label if node.reachable else f"{node.label} (unreachable)"
+        for node in report.nodes
+    ]
+    return {
+        "Profile": f"{profile.name} (round {profile.round}, benchmark {profile.benchmark})",
+        "Config": str(config.source_path or "(assembled in memory)"),
+        "Output": str(out_file),
+        "Nodes": f"{len(labels)} -- {', '.join(labels)}" if labels else "0",
+    }
 
 
 def _require_mlc():
@@ -278,123 +279,144 @@ def capture(
     work_dir = out_dir / WORK_DIRNAME
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # A leftover intermediate from an earlier run must never be mistaken for
-    # this run's result: if the automation reports success but writes nothing,
-    # we have to notice rather than shape stale hardware into a fresh file.
-    stale = work_dir / RAW_FILENAME
-    if stale.exists():
-        stale.unlink()
+    out_file = out_dir / (config.output.file or profile.output_file)
+    with RunLog.open(
+        work_dir, command="capture", details=_log_details(config, profile, report, out_file)
+    ) as runlog:
+        # A leftover intermediate from an earlier run must never be mistaken for
+        # this run's result: if the automation reports success but writes nothing,
+        # we have to notice rather than shape stale hardware into a fresh file.
+        stale = work_dir / RAW_FILENAME
+        if stale.exists():
+            stale.unlink()
 
-    node_config_file = _write_node_config(config) if config.nodes.groups else None
-    mlc_kwargs = build_mlc_kwargs(
-        config,
-        profile,
-        work_dir,
-        node_config_file=node_config_file,
-        run_metadata_path=run_metadata_path,
-    )
-
-    mlc = _require_mlc()
-    log_path = work_dir / "automation.log"
-    previous_cwd = os.getcwd()
-    try:
-        os.chdir(work_dir)
-        with _captured_output(log_path, enabled=not verbose):
-            result = mlc.access(mlc_kwargs)
-    except Exception as e:  # the automation layer raises a variety of types
-        raise CaptureError(
-            f"collection failed: {type(e).__name__}: {e}\n  See {log_path}"
-        ) from e
-    finally:
-        os.chdir(previous_cwd)
-        if node_config_file and os.path.exists(node_config_file):
-            os.unlink(node_config_file)
-
-    if result.get("return", 1) != 0:
-        raise CaptureError(
-            f"collection failed: {result.get('error', 'the automation script reported an error')}"
+        node_config_file = _write_node_config(config) if config.nodes.groups else None
+        mlc_kwargs = build_mlc_kwargs(
+            config,
+            profile,
+            work_dir,
+            node_config_file=node_config_file,
+            run_metadata_path=run_metadata_path,
         )
 
-    for node in report.nodes:
-        if not node.reachable:
-            emit("bad", node.label, f"skipped -- {node.detail}")
-
-    raw_path = _locate_raw(result, work_dir)
-    try:
-        collected = json.loads(raw_path.read_text())
-    except (OSError, ValueError) as e:
-        raise CaptureError(f"could not read collected data from {raw_path}: {e}") from e
-
-    # What came back, not what we asked for. A node can be perfectly reachable
-    # and still return nothing -- an unsupported OS, a probe that needs sudo.
-    # Believing the request over the result is how a capture silently ships
-    # half a system.
-    nodes_expected = len(config.all_targets) + (1 if config.nodes.include_local else 0)
-    nodes_collected = count_collected_nodes(collected)
-
-    if nodes_collected == 0:
-        raise CaptureError(
-            "collection returned no hardware at all. "
-            f"{nodes_expected} node(s) were asked; none reported back. "
-            f"See the automation log at {log_path}."
-        )
-    if nodes_collected < nodes_expected:
-        if not allow_partial:
+        mlc = _require_mlc()
+        log_path = runlog.path
+        previous_cwd = os.getcwd()
+        log.info("collecting with tags: %s", mlc_kwargs.get("tags", ""))
+        log.debug("automation working directory: %s", work_dir)
+        try:
+            os.chdir(work_dir)
+            with runlog.capturing(echo=verbose):
+                result = mlc.access(mlc_kwargs)
+        except Exception as e:  # the automation layer raises a variety of types
             raise CaptureError(
-                f"only {nodes_collected} of {nodes_expected} node(s) returned hardware. "
-                f"See {log_path} for which probe failed, or pass "
-                "--allow-partial to write what was collected."
+                f"collection failed: {type(e).__name__}: {e}\n  See {log_path}"
+            ) from e
+        finally:
+            os.chdir(previous_cwd)
+            if node_config_file and os.path.exists(node_config_file):
+                os.unlink(node_config_file)
+
+        if result.get("return", 1) != 0:
+            raise CaptureError(
+                f"collection failed: {result.get('error', 'the automation script reported an error')}"
             )
-        partial = True
 
-    if nodes_collected == nodes_expected:
-        emit("ok", "collection", f"{nodes_collected} of {nodes_expected} node(s) returned hardware")
-    else:
-        emit(
-            "warn",
-            "collection",
-            f"only {nodes_collected} of {nodes_expected} node(s) returned hardware",
+        for node in report.nodes:
+            if not node.reachable:
+                emit("bad", node.label, f"skipped -- {node.detail}")
+
+        raw_path = _locate_raw(result, work_dir)
+        try:
+            collected = json.loads(raw_path.read_text())
+        except (OSError, ValueError) as e:
+            raise CaptureError(f"could not read collected data from {raw_path}: {e}") from e
+
+        # What came back, not what we asked for. A node can be perfectly reachable
+        # and still return nothing -- an unsupported OS, a probe that needs sudo.
+        # Believing the request over the result is how a capture silently ships
+        # half a system.
+        nodes_expected = len(config.all_targets) + (1 if config.nodes.include_local else 0)
+        nodes_collected = count_collected_nodes(collected)
+
+        if nodes_collected < nodes_expected:
+            log.warning(
+                "only %d of %d node(s) returned hardware", nodes_collected, nodes_expected
+            )
+        else:
+            log.info("%d of %d node(s) returned hardware", nodes_collected, nodes_expected)
+
+        if nodes_collected == 0:
+            raise CaptureError(
+                "collection returned no hardware at all. "
+                f"{nodes_expected} node(s) were asked; none reported back. "
+                f"See the automation log at {log_path}."
+            )
+        if nodes_collected < nodes_expected:
+            if not allow_partial:
+                raise CaptureError(
+                    f"only {nodes_collected} of {nodes_expected} node(s) returned hardware. "
+                    f"See {log_path} for which probe failed, or pass "
+                    "--allow-partial to write what was collected."
+                )
+            partial = True
+
+        if nodes_collected == nodes_expected:
+            emit("ok", "collection", f"{nodes_collected} of {nodes_expected} node(s) returned hardware")
+        else:
+            emit(
+                "warn",
+                "collection",
+                f"only {nodes_collected} of {nodes_expected} node(s) returned hardware",
+            )
+        if report.serving_log and report.serving_log.ok:
+            emit("ok", str(config.serving.node), "serving config parsed")
+        if report.endpoint and report.endpoint.ok:
+            emit("ok", str(config.serving.url), f"framework detected -- {report.endpoint.detail}")
+
+        from .output import shape  # local import keeps module import order simple
+
+        final = shape(
+            collected,
+            config,
+            profile,
+            nodes_expected=nodes_expected,
+            nodes_collected=nodes_collected,
+            partial=partial,
+            package_version=__version__,
         )
-    if report.serving_log and report.serving_log.ok:
-        emit("ok", str(config.serving.node), "serving config parsed")
-    if report.endpoint and report.endpoint.ok:
-        emit("ok", str(config.serving.url), f"framework detected -- {report.endpoint.detail}")
 
-    from .output import shape  # local import keeps module import order simple
+        out_file.write_text(json.dumps(final, indent=2) + "\n")
+        log.info("wrote %s", out_file)
 
-    final = shape(
-        collected,
-        config,
-        profile,
-        nodes_expected=nodes_expected,
-        nodes_collected=nodes_collected,
-        partial=partial,
-        package_version=__version__,
-    )
+        extra: list[Path] = []
+        for name in _KEEP_FILES:
+            produced = work_dir / name
+            if produced.exists():
+                destination = out_dir / name
+                produced.replace(destination)
+                extra.append(destination)
+                log.info("wrote %s", destination)
 
-    output_path = out_dir / (config.output.file or profile.output_file)
-    output_path.write_text(json.dumps(final, indent=2) + "\n")
+        runlog.outcome = (
+            f"complete -- {nodes_collected} of {nodes_expected} node(s)"
+            if not partial
+            else f"partial -- only {nodes_collected} of {nodes_expected} node(s) answered"
+        )
 
-    extra: list[Path] = []
-    for name in _KEEP_FILES:
-        produced = work_dir / name
-        if produced.exists():
-            destination = out_dir / name
-            produced.replace(destination)
-            extra.append(destination)
-
-    return CaptureResult(
-        output_path=output_path,
-        profile=profile,
-        report=report,
-        nodes=report.nodes,
-        complete=not partial,
-        raw_path=raw_path,
-        extra_files=extra,
-        duration=time.monotonic() - started,
-        nodes_collected=nodes_collected,
-        nodes_expected=nodes_expected,
-    )
+        return CaptureResult(
+            output_path=out_file,
+            profile=profile,
+            report=report,
+            nodes=report.nodes,
+            complete=not partial,
+            raw_path=raw_path,
+            extra_files=extra,
+            log_path=runlog.path,
+            duration=time.monotonic() - started,
+            nodes_collected=nodes_collected,
+            nodes_expected=nodes_expected,
+        )
 
 
 def count_collected_nodes(collected: dict) -> int:

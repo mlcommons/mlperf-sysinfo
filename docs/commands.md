@@ -57,7 +57,7 @@ $ mlperf-sysinfo init endpoints
 ## `check`
 
 ```bash
-mlperf-sysinfo check -c CONFIG [--offline] [--verbose]
+mlperf-sysinfo check -c CONFIG [--offline] [--verbose] [--log-level LEVEL]
 ```
 
 Validates the config against its profile, then reaches every node, endpoint and
@@ -140,6 +140,7 @@ NODES
 
 ```bash
 mlperf-sysinfo capture -c CONFIG [--allow-partial] [--run-metadata PATH] [--verbose]
+                       [--log-level LEVEL]
 ```
 
 Runs the check first — always, with no way to skip it — then collects and
@@ -154,9 +155,16 @@ $ mlperf-sysinfo capture -c sysinfo.yaml
   1 node(s) - 8 accelerators - profile endpoints
 
   Written  results/h100_run1/system_desc.json
+  log      results/h100_run1/.mlperf-sysinfo/capture_20260819_202120.log
 
   Next: mlperf-sysinfo show results/h100_run1/system_desc.json
 ```
+
+Every run leaves a log beside the deliverable, timestamped so a retry does not
+overwrite the log of the failure that prompted it. It records which profile,
+config and nodes produced the run, stamps each line the automation emits, and
+closes with the outcome -- see
+[the run log](architecture.md#the-run-log).
 
 ### Options
 
@@ -164,7 +172,8 @@ $ mlperf-sysinfo capture -c sysinfo.yaml
 | --- | --- |
 | `--allow-partial` | Proceed when a node is unreachable or does not report back. The output is marked partial. Never forgives a config problem, and never forgives zero nodes |
 | `--run-metadata PATH` | A `run_metadata.json` to patch with serving-config values extracted from the server's startup log |
-| `--verbose` | Show the automation's own log on the terminal instead of writing it to `.mlperf-sysinfo/automation.log` |
+| `--verbose` | Watch the automation's own output on the terminal as well, and show this package's own log down to `debug`. The run log is written either way |
+| `--log-level` | `debug`, `info`, `warning` or `error` — what of this package's own log reaches the terminal. The run log file always keeps every level |
 
 ### When the check fails
 
@@ -182,8 +191,8 @@ error  nothing was collected
 ### When collection comes back short
 
 ```console
-error  only 1 of 2 node(s) returned hardware. See .../automation.log for which
-       probe failed, or pass --allow-partial to write what was collected.
+error  only 1 of 2 node(s) returned hardware. See .../capture_20260819_202120.log
+       for which probe failed, or pass --allow-partial to write what was collected.
 ```
 
 With `--allow-partial`:
@@ -338,7 +347,38 @@ asked which you wanted.
 Misspelled config options get the same treatment — see
 [Configuration](configuration.md#misspelled-options).
 
+## Logging
+
+Alongside the styled blocks, the tool logs its own actions — config load,
+`extends` merging, each probe, what came back, what was written — with a date, a
+level and the module that did it:
+
+```console
+$ mlperf-sysinfo check -c sysinfo.yaml --log-level info
+[2026-08-19 20:47:33] INFO     config: loaded config sysinfo.yaml (profile endpoints)
+[2026-08-19 20:47:33] INFO     preflight: 5 of 5 required field(s) set for profile endpoints
+[2026-08-19 20:47:33] INFO     preflight: endpoint http://127.0.0.1:8000: no answer
+
+  profile    endpoints
+  ...
+```
+
+**The run log file always keeps every level**, whatever the terminal is set to —
+see [the run log](architecture.md#the-run-log). The terminal default is `error`,
+which in practice means nothing extra: every warning a check produces is
+already a styled row, and printing it as a log line as well says the same thing
+twice in two formats a few lines apart. Ask for `info` or `debug` when you want
+the trace live.
+
+These lines go to **stderr**, so redirecting the styled report keeps the trace
+out of it:
+
+```bash
+mlperf-sysinfo capture -c sysinfo.yaml --log-level info 2>trace.log
+```
+
 ## Colour
 
 Output is coloured on a terminal and plain when piped. `NO_COLOR=1` and
-`TERM=dumb` both suppress it.
+`TERM=dumb` both suppress it. Log lines are coloured by level — the level word
+only, so it does not compete with the styled blocks.

@@ -90,12 +90,37 @@ def capture(
     run_metadata_path: Path | None = None,
     progress: Callable[[str, str, str], None] | None = None,
     report: CheckReport | None = None,  # reuse an earlier check
-    verbose: bool = False,            # let the automation log reach the terminal
+    verbose: bool = False,            # also echo the automation to the terminal
 ) -> CaptureResult: ...
 ```
 
 `progress` is called as `(kind, label, detail)` where `kind` is one of `ok`,
 `bad`, `warn`, `skip` — the caller owns all rendering.
+
+`CaptureResult.log_path` is the run log for that capture, which is the thing to
+surface or attach when a capture comes back partial. It is written whether or
+not `verbose` is set.
+
+## Logging
+
+The package logs its own actions under the `mlperf_sysinfo` logger, at a level,
+with the module that acted:
+
+```python
+import logging
+
+logging.getLogger("mlperf_sysinfo").addHandler(my_handler)
+```
+
+Nothing needs configuring for this to work. The logger is levelled to `DEBUG` at
+import so records always reach whatever handlers exist, and propagation is left
+**on** — so your root handlers see them with no setup. Levels are chosen for
+severity rather than for the CLI's own rendering: an unreachable node is a
+`WARNING` because you have `run_check()` and no styled report to read it from.
+
+`mlperf_sysinfo.logs.setup()` is what the CLI calls to take over the terminal,
+and it disables propagation. Do not call it from an embedded use unless you want
+this package writing to stderr itself.
 
 Passing an earlier `report` avoids re-running reachability checks, but the
 config validation is applied either way. There is no way to capture without a

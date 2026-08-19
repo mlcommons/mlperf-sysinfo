@@ -105,22 +105,76 @@ automation produces goes into a scratch directory beside it:
 
 ```text
 results/my_run/
-├── system_desc.json            ← the deliverable
+├── system_desc.json                 ← the deliverable
 └── .mlperf-sysinfo/
-    ├── raw-system-info.json    ← the field set mlc-scripts returned
-    ├── automation.log          ← the automation's own output
+    ├── capture_20260819_202120.log  ← the run log
+    ├── raw-system-info.json         ← the field set mlc-scripts returned
     └── mlperf-system-info-single-node-0.json
 ```
 
 Redfish captures (`redfish_nameplate_power.yaml`, `redfish_capture.yaml`) are
 deliverables in their own right and are lifted back out into `output.dir`.
 
-Pass `--verbose` to see the automation log on the terminal instead of in the
-file.
+## The run log
+
+Every `capture` writes one, named after the time it started so a retry leaves
+the log of the failure that prompted it in place. It opens with what produced
+the run and closes with how it ended:
+
+```text
+mlperf-sysinfo capture — 20260819_202120
+Started   : 2026-08-19T20:21:20+05:30
+Versions  : mlperf-sysinfo 1.0.0a3, mlc-scripts 1.2.0a2
+Profile   : endpoints (round 6.0, benchmark endpoints)
+Config    : /home/user/sysinfo.yaml
+Output    : /home/user/results/my_run/system_desc.json
+Nodes     : 2 -- this machine, root@node1:22
+Invoked   : mlperf-sysinfo capture -c sysinfo.yaml
+
+[2026-08-19 20:21:20] INFO     config: loaded config /home/user/sysinfo.yaml (profile endpoints)
+[2026-08-19 20:21:20] INFO     preflight: 5 of 5 required field(s) set for profile endpoints
+[2026-08-19 20:21:20] INFO     collector: collecting with tags: get-mlperf-multi-node-system-info,_cuda,_endpoints
+[2026-08-19 20:21:22] Skipping password prompt - non-interactive terminal detected!
+[2026-08-19 20:21:33,496 deprecation.py :  66 WARN ] - Your mlcflow version is deprecated
+                        Please upgrade to mlcflow >= 1.3.0
+[2026-08-19 20:21:27] INFO     collector: 1 of 1 node(s) returned hardware
+[2026-08-19 20:21:27] INFO     output: 3 field(s) blank in the written file (unset in config, or not detected): hw_notes, link_config, sw_notes
+[2026-08-19 20:21:27] INFO     collector: wrote /home/user/results/my_run/system_desc.json
+
+------------------------------------------------------------------------
+Finished  : 2026-08-19T20:21:27+05:30
+Duration  : 6.6s
+Outcome   : complete -- 1 of 1 node(s)
+```
+
+Four things about the body are deliberate:
+
+- **This package's own actions are in there**, at a level and with the module
+  that took them, not just the automation's output. What the automation returned
+  and what was concluded from it are different things, and the second is usually
+  what is being reconstructed. Every level reaches the file regardless of what
+  the terminal is set to — see [Logging](commands.md#logging).
+- **Lines mlcflow already stamped keep their own stamp.** A second one in front
+  would only push the real timestamp out of the reader's eye line. The two
+  styles are close enough on purpose, so a mixed log still reads down the page.
+- **Indented lines are indented, not stamped.** They are the tail of the
+  message above -- the wrapped rest of a warning, or the frames of a traceback.
+  A stamp on each claims they were logged separately and pulls the block apart.
+- **Records from before the file existed are replayed into it.** Loading the
+  config and the whole pre-flight check happen before an output directory is
+  touched, so they are buffered and written in once the file opens. Those early
+  records are usually the interesting ones.
+
+The round belongs in the header for the same reason it is stamped into every
+output file and printed nowhere on the terminal: a file read weeks later has to
+say which rules produced it.
+
+Pass `--verbose` to watch the automation on the terminal as well. The log is
+still written either way.
 
 ## Known limitations
 
-!!! danger "Credentials can reach `automation.log`"
+!!! danger "Credentials can reach the run log"
     Keeping secrets in `${VAR}` keeps them out of your config file and out of
     git, but the underlying automation prints its own command lines. A Redfish
     password may appear in the log. Treat `.mlperf-sysinfo/` as sensitive.

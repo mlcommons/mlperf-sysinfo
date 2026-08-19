@@ -17,6 +17,7 @@ from typing import Any, Literal, get_origin
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from . import logs
 from .errors import ConfigError
 from .suggest import did_you_mean, options_at
 
@@ -506,6 +507,9 @@ def drop_empty_sections(data: Any, model: type[BaseModel] | None = None) -> Any:
     return out
 
 
+log = logs.get(__name__)
+
+
 def _read_yaml(path: Path) -> dict:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
@@ -547,6 +551,7 @@ def _resolve_extends(data: dict, base_dir: Path, depth: int = 0) -> dict:
     parent_path = Path(str(parent_ref)).expanduser()
     if not parent_path.is_absolute():
         parent_path = (base_dir / parent_path).resolve()
+    log.debug("extends: merging %s under %s", parent_path, base_dir)
     parent = _unwrap(_read_yaml(parent_path))
     parent = _resolve_extends(parent, parent_path.parent, depth + 1)
     return deep_merge(parent, data)
@@ -560,6 +565,9 @@ def load_config(path: str | Path) -> SysinfoConfig:
 
     missing: list[str] = []
     data = interpolate_env(data, missing=missing)
+    if missing:
+        # Never the value -- the whole point of ${VAR} is keeping it off disk.
+        log.warning("unset environment variable(s): %s", ", ".join(missing))
 
     try:
         config = SysinfoConfig.model_validate(data)
@@ -570,6 +578,8 @@ def load_config(path: str | Path) -> SysinfoConfig:
 
     config.source_path = path
     config.unresolved_env = missing
+    log.info("loaded config %s (profile %s)", path, config.profile)
+    log.debug("output directory resolved to %s", config.output_dir)
     return config
 
 

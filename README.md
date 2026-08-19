@@ -268,16 +268,29 @@ at the start of a benchmark rather than at the end of one.
 ## Where files land
 
 The deliverable is the only thing written to `output.dir`. Everything the
-automation produces -- the raw intermediate, per-node files, and its log --
-goes into `output.dir/.mlperf-sysinfo/`. Pass `--verbose` to see the automation
-log on the terminal instead of in that directory.
+automation produces -- the raw intermediate, per-node files, and the run log
+-- goes into `output.dir/.mlperf-sysinfo/`. The run log is named after the time
+the capture started (`capture_20260819_202120.log`), carries a header saying
+which profile, config and nodes produced it, and closes with the outcome.
+
+Between those it holds both the automation's output and this tool's own actions,
+each line with a date, a level and the module that acted:
+
+```text
+[2026-08-19 20:21:20] INFO     preflight: 5 of 5 required field(s) set for profile endpoints
+[2026-08-19 20:21:20] INFO     collector: collecting with tags: ...,_cuda,_endpoints
+[2026-08-19 20:21:27] INFO     collector: 1 of 1 node(s) returned hardware
+```
+
+The file keeps every level. On the terminal the styled report is the default and
+`--log-level info` (or `--verbose`) shows the trace live.
 
 Two caveats worth knowing:
 
 - **Credentials can be echoed by the collection layer.** Keeping them in
   `${VAR}` keeps them out of your config file and out of git, but the
   underlying automation prints its own command lines, so a Redfish password may
-  appear in `automation.log`. Treat that directory as sensitive.
+  appear in the run log. Treat that directory as sensitive.
 - **Remote scratch files are not confined.** When collecting over SSH, the
   automation writes its own temporary files on each remote node (under `$HOME`
   and `/tmp` there). This package cannot redirect those.

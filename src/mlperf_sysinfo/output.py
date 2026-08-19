@@ -20,8 +20,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from . import logs
 from .config import SysinfoConfig
 from .profiles import Profile
+
+log = logs.get(__name__)
 
 #: Mirrors SYSTEM_DESC_REQUIRED_FIELDS_NETWORK_MODE in the submission checker.
 _NETWORK_EXTRA_FIELDS = [
@@ -457,6 +460,38 @@ def _collection_provenance(collected: dict) -> dict:
         return {}
 
 
+def _blank_paths(result: dict) -> set[str]:
+    """Dotted paths that came out blank, for whatever reason.
+
+    Deliberately does not claim *why*. A blank field is either one the config
+    never supplied or one the automation could not determine, and this walker
+    cannot tell them apart -- naming it after either would mislead in half the
+    cases.
+
+    Only the shaped document is walked, and only one level into ``node_types``
+    and ``accelerator_info`` -- those are where probed values live, and the
+    intent is a short list for the log rather than a full report. ``validate``
+    is what produces the reviewable version.
+    """
+    found = set()
+
+    def scan(source: dict, prefix: str) -> None:
+        for name, value in source.items():
+            if isinstance(value, dict):
+                scan(value, f"{prefix}{name}.")
+            elif not isinstance(value, list) and is_not_detected(value):
+                found.add(f"{prefix}{name}")
+
+    scan({k: v for k, v in result.items() if k != "node_types"}, "")
+    for node in result.get("node_types") or []:
+        if isinstance(node, dict):
+            scan({k: v for k, v in node.items() if k != "accelerator_info"}, NODE_SCOPE)
+            accelerator = node.get("accelerator_info")
+            if isinstance(accelerator, dict):
+                scan(accelerator, f"{NODE_SCOPE}accelerator_info.")
+    return found
+
+
 def shape(
     collected: dict,
     config: SysinfoConfig,
@@ -472,6 +507,18 @@ def shape(
         result = build_endpoints(collected, config)
     else:
         result = build_flat(collected, config, profile)
+    log.debug(
+        "shaped %d field(s) for profile %s (%s)", len(result), profile.name, profile.shape
+    )
+    # Recorded so "was this field always blank?" has an answer without a
+    # re-run. validate is what turns this into a reviewable report.
+    blank = sorted(_blank_paths(result))
+    if blank:
+        log.info(
+            "%d field(s) blank in the written file (unset in config, or not detected): %s",
+            len(blank),
+            ", ".join(blank),
+        )
     result["mlperf_sysinfo"] = provenance(
         profile=profile,
         collected=collected,

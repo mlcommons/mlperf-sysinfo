@@ -8,7 +8,6 @@ capture always runs it first and there is no flag to skip it.
 
 from __future__ import annotations
 
-import logging
 import shutil
 import sys
 from pathlib import Path
@@ -17,10 +16,10 @@ from typing import Annotated
 import cyclopts
 from cyclopts.exceptions import CycloptsError
 
-from . import __version__, ui
+from . import __version__, logs, ui
 from .collector import capture as run_capture
 from .config import load_config
-from .errors import CheckFailed, SysinfoError
+from .errors import CheckFailed, ConfigError, SysinfoError
 from .preflight import CheckReport, run_check
 from .profiles import available as available_profiles
 from .profiles import load as load_profile
@@ -45,11 +44,41 @@ ConfigOpt = Annotated[
 ]
 
 
-def _setup_logging(verbose: bool) -> None:
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.WARNING,
-        format="%(levelname)s  %(message)s",
-    )
+#: What reaches the terminal when nothing is asked for.
+#:
+#: Levels are chosen for severity, not for this CLI: an unreachable node is a
+#: WARNING because a library caller has no styled report to read it from. But
+#: this CLI *does* render one, and every warning the check produces appears in
+#: it -- so leaving the terminal at WARNING printed each of them twice, in two
+#: formats, three lines apart. Hence "error": the trace stays one flag away and
+#: is in the run log regardless, while the styled blocks own the screen.
+DEFAULT_LOG_LEVEL = "error"
+
+LogLevelOpt = Annotated[
+    str,
+    cyclopts.Parameter(
+        name=["--log-level"],
+        help="Terminal log level: debug, info, warning or error. The run log keeps all of them.",
+    ),
+]
+
+
+def _setup_logging(verbose: bool, level: str = DEFAULT_LOG_LEVEL) -> None:
+    """``--verbose`` is shorthand for ``--log-level debug``.
+
+    An explicit level wins, so ``--verbose --log-level info`` still echoes the
+    automation to the terminal without the debug detail.
+    """
+    if level == DEFAULT_LOG_LEVEL and verbose:
+        level = "debug"
+    try:
+        logs.setup(level)
+    except ValueError:
+        guess = did_you_mean(level, logs.LEVELS)
+        raise ConfigError(
+            f"unknown --log-level {level!r}.{guess} "
+            f"Available levels: {', '.join(logs.LEVELS)}."
+        ) from None
 
 
 def _load(config_path: Path):
@@ -232,9 +261,10 @@ def check(
         cyclopts.Parameter(help="Validate the config only; do not touch the network."),
     ] = False,
     verbose: Annotated[bool, cyclopts.Parameter(name=["--verbose", "-v"])] = False,
+    log_level: LogLevelOpt = DEFAULT_LOG_LEVEL,
 ) -> int:
     """Validate the config and reach every node it names. Nothing is collected."""
-    _setup_logging(verbose)
+    _setup_logging(verbose, log_level)
     cfg, profile = _load(config)
     report = run_check(cfg, profile, skip_network=offline)
     out_file = cfg.output_dir / (cfg.output.file or profile.output_file)
@@ -257,9 +287,10 @@ def capture(
         cyclopts.Parameter(help="A run_metadata file to patch with serving config values."),
     ] = None,
     verbose: Annotated[bool, cyclopts.Parameter(name=["--verbose", "-v"])] = False,
+    log_level: LogLevelOpt = DEFAULT_LOG_LEVEL,
 ) -> int:
     """Run the check, then collect and write the system description."""
-    _setup_logging(verbose)
+    _setup_logging(verbose, log_level)
     cfg, profile = _load(config)
 
     ui.blank()
@@ -302,6 +333,8 @@ def capture(
         ui.hint("One or more nodes did not answer. The file records this.")
     for extra in result.extra_files:
         print(f"  {ui.dim('also')}     {extra}")
+    if result.log_path:
+        print(f"  {ui.dim('log')}      {ui.dim(str(result.log_path))}")
     ui.blank()
     ui.hint(f"Next: mlperf-sysinfo show {result.output_path}")
     return EXIT_OK if result.complete else EXIT_PROBLEMS
@@ -446,6 +479,10 @@ def main() -> None:
     0 all good, 1 the run found problems, 2 the command or config was wrong.
     A mistyped flag must not look like a failed check.
     """
+    # Installed before dispatch so that commands without a --verbose flag still
+    # report warnings from config loading. check and capture re-level it once
+    # they have parsed their own options.
+    logs.setup(DEFAULT_LOG_LEVEL)
     try:
         # print_error=False: cyclopts would otherwise render its own panel and
         # we would print the same text again underneath it.

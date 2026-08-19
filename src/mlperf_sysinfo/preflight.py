@@ -21,6 +21,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from . import logs
 from .config import (
     SshTarget,
     SysinfoConfig,
@@ -134,6 +135,9 @@ class CheckReport:
 # ---------------------------------------------------------------------------
 # individual probes
 # ---------------------------------------------------------------------------
+
+
+log = logs.get(__name__)
 
 
 def _ssh_command(target: SshTarget, remote_cmd: str, timeout: int) -> subprocess.CompletedProcess:
@@ -290,23 +294,54 @@ def run_check(
                 ("power.redfish.endpoint", "BMC address for power capture")
             )
 
+    log.info(
+        "%d of %d required field(s) set for profile %s",
+        report.satisfied_count,
+        len(profile.requires),
+        profile.name,
+    )
+    for path, _ in report.missing_required:
+        log.debug("required field not set: %s", path)
+    for path, value in report.all_placeholders:
+        log.debug("placeholder still in %s: %s", path, value)
+
     if skip_network:
         report.network_checked = False
+        log.debug("skipping every network probe (offline)")
         return report
 
     targets = config.all_targets
     if targets:
+        log.info("probing %d node(s): %s", len(targets), ", ".join(str(t) for t in targets))
         with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
             report.nodes = list(
                 pool.map(lambda t: check_node(t, config.system.accelerator), targets)
             )
+        for node in report.nodes:
+            if node.reachable:
+                log.debug("%s reachable -- %s", node.label, node.detail)
+            else:
+                # In the styled block too, but a log that omits why a run
+                # stopped is not worth keeping.
+                log.warning("%s unreachable -- %s", node.label, node.detail)
 
     if profile.collect.endpoint_probe and config.serving.is_probeable:
+        log.debug("probing endpoint %s", config.serving.url)
         report.endpoint = probe_endpoint(config.serving.url)
+        log.info(
+            "endpoint %s: %s",
+            config.serving.url,
+            report.endpoint.detail if report.endpoint.ok else "no answer",
+        )
 
     if profile.collect.serving_log and config.serving.node:
         report.serving_log = check_serving_log(
             SshTarget.parse(config.serving.node), config.serving.log
+        )
+        log.info(
+            "serving log %s: %s",
+            config.serving.log,
+            "found" if report.serving_log.ok else report.serving_log.detail,
         )
 
     return report
