@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlperf-sysinfo"
-version = "1.0.0a1"
+version = "1.0.0a2"
 description = "Capture MLPerf system descriptions: one config format, one CLI, per-working-group profiles."
 readme = "README.md"
 license = "Apache-2.0"
@@ -51,7 +51,7 @@ Repository = "https://github.com/anandhu-eng/mlperf-sysinfo"
 Documentation = "https://anandhu-eng.github.io/mlperf-sysinfo/"
 Issues = "https://github.com/anandhu-eng/mlperf-sysinfo/issues"
 
-# mlc-scripts 1.2.0a1 depends on mlcflow>=1.4.0a1, itself a pre-release. pip
+# mlc-scripts 1.2.0a2 depends on mlcflow>=1.4.0a1, itself a pre-release. pip
 # allows this because the specifiers name pre-releases explicitly; uv needs to
 # be told. This affects uv users only -- `pip install mlperf-sysinfo` resolves
 # without any flag.
