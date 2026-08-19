@@ -263,6 +263,12 @@ def capture(
         )
 
     partial = report.has_reach_problems
+    log.info(
+        "pre-flight check %s -- %d node(s), profile %s",
+        "passed" if not partial else "passed with warnings",
+        report.collectable_nodes,
+        profile.name,
+    )
     emit(
         "ok",
         "pre-flight check",
@@ -324,6 +330,7 @@ def capture(
 
         for node in report.nodes:
             if not node.reachable:
+                log.warning("%s skipped -- %s", node.label, node.detail)
                 emit("bad", node.label, f"skipped -- {node.detail}")
 
         raw_path = _locate_raw(result, work_dir)

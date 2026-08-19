@@ -51,6 +51,13 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 #: Widest level name, so the message column lines up.
 _LEVEL_WIDTH = len("CRITICAL")
 
+#: Marks a record whose fact a styled table also renders. Pass it as
+#: ``extra=STYLED`` and the terminal drops the record unless the level is
+#: DEBUG, where you have asked for everything. The run log file keeps it either
+#: way. Sentence-shaped output is *not* marked: for those commands the log line
+#: is the output, so suppressing it would leave nothing.
+STYLED = {"styled": True}
+
 #: How many early records to hold before a run log exists. A capture emits a
 #: few dozen; the cap only exists so an embedder that never opens one cannot
 #: grow this without bound.
@@ -118,6 +125,22 @@ class ColourFormatter(PlainFormatter):
         return head + body.replace("\n", "\n" + " " * prefix_width)
 
 
+class _StyledTableOwnsIt(logging.Filter):
+    """Keeps the terminal from saying the same thing twice.
+
+    ``check`` renders every unreachable node and every unset field as an
+    aligned row. A log line for the same fact, three lines above it in a
+    different format, is worse than either alone -- but the *record* still has
+    to exist, both for the run log and for library callers who have no styled
+    report to read it from. So the record is made and the terminal drops it.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not getattr(record, "styled", False):
+            return True
+        return _terminal is not None and _terminal.level <= logging.DEBUG
+
+
 class _Buffer(logging.Handler):
     """Holds records until a run log exists to replay them into."""
 
@@ -173,6 +196,7 @@ def setup(level: str | int = logging.WARNING) -> None:
     if _terminal is None:
         _terminal = logging.StreamHandler(stream=_TerminalStream())
         _terminal.setFormatter(ColourFormatter())
+        _terminal.addFilter(_StyledTableOwnsIt())
         logger.addHandler(_terminal)
     _terminal.setLevel(_resolve(level))
 

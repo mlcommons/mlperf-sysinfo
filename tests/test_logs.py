@@ -34,14 +34,19 @@ WHEN = datetime.datetime(2026, 8, 19, 20, 21, 22)
 def quiet_terminal(monkeypatch):
     """Keep these tests off the real terminal handler's stream.
 
-    Also empties the replay buffer. It is deliberately not cleared on drain
+    Also empties the replay buffer -- it is deliberately not cleared on drain
     failure in production, so without this every test would find the previous
-    test's records replayed into its file.
+    test's records replayed into its file -- and restores the logger's handler
+    list, since a test that calls setup() attaches one that would otherwise
+    outlive it.
     """
+    logger = logging.getLogger(logs.LOGGER_NAME)
+    original = list(logger.handlers)
     monkeypatch.setattr(logs, "_terminal", None)
     logs._buffer.records.clear()
     yield
     logs._buffer.records.clear()
+    logger.handlers = original
 
 
 @pytest.fixture
@@ -147,16 +152,17 @@ class TestLevelResolution:
 
     def test_an_explicit_level_beats_verbose(self):
         """--verbose --log-level info still echoes the automation without the
-        debug detail."""
+        debug detail. The flag defaults to None rather than to "info" precisely
+        so this stays distinguishable from not passing it."""
         _setup_logging(verbose=True, level="info")
         assert logs._terminal.level == logging.INFO
 
-    def test_the_default_keeps_the_terminal_for_the_styled_blocks(self):
-        """Every warning the check produces is already rendered as a styled row,
-        so printing it as a log line as well says it twice in two formats."""
+    def test_the_default_shows_info(self):
+        """Sentence-shaped output *is* log records, so a default that hid them
+        would leave `init` printing nothing at all."""
         _setup_logging(verbose=False)
-        assert logs._terminal.level == logging.ERROR
-        assert DEFAULT_LOG_LEVEL == "error"
+        assert logs._terminal.level == logging.INFO
+        assert DEFAULT_LOG_LEVEL == "info"
 
 
 class TestSetupIsIdempotent:
@@ -199,3 +205,79 @@ class TestARealCheckIsTraced:
         assert "preflight: " in text
         assert "required field(s) set" in text
         assert "skipping every network probe" in text
+
+
+class TestSentenceShapedOutputIsLogged:
+    """Option 3: output splits by shape, not by command.
+
+    Sentence-shaped output *is* log records, so it carries a date and a level.
+    Aligned tables keep their columns, because a 31-character prefix on every
+    row costs exactly the scannability a table exists for.
+    """
+
+    def test_init_logs_instead_of_printing(self, tmp_path, capsys):
+        from mlperf_sysinfo.cli import init
+
+        logs.setup("info")
+        assert init(path=tmp_path / "sysinfo.yaml") == 0
+        captured = capsys.readouterr()
+        assert "wrote template sysinfo.yaml" in captured.err
+        assert "INFO" in captured.err
+        assert captured.out == "", "init should have nothing left on stdout"
+
+    def test_init_reports_a_bad_profile_at_error_level(self, tmp_path, capsys):
+        from mlperf_sysinfo.cli import init
+
+        logs.setup("info")
+        assert init("endpoint", path=tmp_path / "sysinfo.yaml") == 2
+        err = capsys.readouterr().err
+        assert "ERROR" in err
+        assert 'Did you mean "endpoints"' in err
+
+    def test_a_table_command_keeps_its_table_on_stdout(self, capsys):
+        from mlperf_sysinfo.cli import profiles_cmd
+
+        logs.setup("info")
+        profiles_cmd()
+        out = capsys.readouterr().out
+        assert "endpoints" in out and "inference" in out
+        assert "INFO" not in out, "the table itself must not carry log prefixes"
+
+    def test_the_check_verdict_is_a_record_but_the_report_is_a_table(
+        self, good_config_file, capsys
+    ):
+        from mlperf_sysinfo.cli import check
+
+        logs.setup("info")
+        check(config=good_config_file, offline=True)
+        captured = capsys.readouterr()
+        assert "REQUIRED BY PROFILE" in captured.out  # the table stayed a table
+        assert "config is valid" in captured.err  # the verdict became a record
+
+
+class TestNothingIsSaidTwice:
+    def test_a_styled_record_is_kept_in_the_file_but_not_printed(self, tmp_path, capsys):
+        """check renders every unreachable node as a row. The record still has
+        to exist -- for the file, and for library callers with no report to
+        read -- so it is made, and the terminal drops it."""
+        logs.setup("info")
+        opened = RunLog.open(tmp_path, command="capture", details={}, started=WHEN)
+        try:
+            logs.get("mlperf_sysinfo.preflight").warning(
+                "node1 unreachable -- timed out", extra=logs.STYLED
+            )
+        finally:
+            opened.finish()
+        assert "node1 unreachable" not in capsys.readouterr().err
+        assert any("node1 unreachable" in line for line in body(opened))
+
+    def test_debug_shows_it_after_all(self, tmp_path, capsys):
+        """At debug you have asked for everything, duplication included."""
+        logs.setup("debug")
+        logs.get("mlperf_sysinfo.preflight").warning("node1 unreachable", extra=logs.STYLED)
+        assert "node1 unreachable" in capsys.readouterr().err
+
+    def test_an_unmarked_record_always_prints(self, capsys):
+        logs.setup("info")
+        logs.get("mlperf_sysinfo.config").info("loaded config sysinfo.yaml")
+        assert "loaded config sysinfo.yaml" in capsys.readouterr().err

@@ -31,12 +31,8 @@ mlperf-sysinfo init endpoints
 
 ```console
 $ mlperf-sysinfo init endpoints
-
-  Written template sysinfo.yaml to path: /home/user/sysinfo.yaml
-
-  profile: endpoints
-
-  Edit the template sysinfo.yaml before running the actual capture command.
+[2026-08-19 21:37:29] INFO     init: wrote template sysinfo.yaml (profile endpoints) to /home/user/sysinfo.yaml
+[2026-08-19 21:37:29] INFO     init: edit it before running 'mlperf-sysinfo capture -c sysinfo.yaml'
 ```
 
 </details>
@@ -114,7 +110,7 @@ WORTH FILLING IN
   ! submission.notes.software   empty   Becomes sw_notes on every node type
   ! run.link_config             empty   Reviewers use it to reproduce the run
 
-  Ready to capture.
+[2026-08-19 21:39:59] INFO     check: ready to capture
 ```
 
 </details>
@@ -135,15 +131,13 @@ mlperf-sysinfo capture -c sysinfo.yaml
 
 ```console
 $ mlperf-sysinfo capture -c sysinfo.yaml
-
-  ✓ pre-flight check     passed -- 1 node(s), profile endpoints
-  ✓ collection           1 of 1 node(s) returned hardware
-
-  1 node(s) - profile endpoints
-
-  Written  results/sysinfo/system_desc.json
-
-  Next: mlperf-sysinfo show results/sysinfo/system_desc.json
+[2026-08-19 21:42:12] INFO     collector: pre-flight check passed -- 1 node(s), profile endpoints
+[2026-08-19 21:42:12] INFO     collector: collecting with tags: get-mlperf-multi-node-system-info,_cuda,_endpoints
+[2026-08-19 21:42:18] INFO     collector: 1 of 1 node(s) returned hardware
+[2026-08-19 21:42:18] INFO     collector: wrote results/sysinfo/system_desc.json
+[2026-08-19 21:42:18] INFO     capture: 1 node(s) - 1 accelerators - profile endpoints
+[2026-08-19 21:42:18] INFO     capture: run log results/sysinfo/.mlperf-sysinfo/capture_20260819_214212.log
+[2026-08-19 21:42:18] INFO     capture: next: mlperf-sysinfo show results/sysinfo/system_desc.json
 ```
 
 </details>
@@ -169,7 +163,7 @@ WARNINGS
   ! sw_notes on every node type is empty -- Becomes sw_notes on every node type
   ! link_config is empty -- Reviewers use it to reproduce the run
 
-  Valid. 5 required field(s) present. 4 warning(s).
+[2026-08-19 21:42:30] INFO     report: valid -- 5 required field(s) present, 4 warning(s)
 ```
 
 </details>

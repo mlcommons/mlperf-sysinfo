@@ -44,12 +44,8 @@ passed.
 
 ```console
 $ mlperf-sysinfo init endpoints
-
-  Written template sysinfo.yaml to path: /home/user/sysinfo.yaml
-
-  profile: endpoints
-
-  Edit the template sysinfo.yaml before running the actual capture command.
+[2026-08-19 21:37:29] INFO     init: wrote template sysinfo.yaml (profile endpoints) to /home/user/sysinfo.yaml
+[2026-08-19 21:37:29] INFO     init: edit it before running 'mlperf-sysinfo capture -c sysinfo.yaml'
 ```
 
 ---
@@ -70,6 +66,7 @@ collected and nothing is written.
 
 ```console
 $ mlperf-sysinfo check -c sysinfo.yaml
+[2026-08-19 21:39:59] INFO     config: loaded config sysinfo.yaml (profile endpoints)
 
   profile    endpoints
   output     results/h100_run1/system_desc.json
@@ -80,7 +77,7 @@ NODES
 REQUIRED BY PROFILE 'ENDPOINTS'
   ✓ 5 fields set
 
-  Ready to capture.
+[2026-08-19 21:39:59] INFO     check: ready to capture
 ```
 
 ### A config that is not
@@ -113,8 +110,8 @@ WORTH FILLING IN
   ! submission.notes.software    empty         Becomes sw_notes on every node type
   ! run.link_config              empty         Reviewers use it to reproduce the run
 
-  4 problems.
-  Fill in the missing fields and run check again.
+[2026-08-19 21:39:59] ERROR    check: 4 problems
+[2026-08-19 21:39:59] ERROR    check: fill in the missing fields and run check again
 ```
 
 Exit code `1`. **Worth filling in** lists fields that are *empty* and only
@@ -130,8 +127,8 @@ NODES
   ✗ root@node3:22    unreachable   ssh: connect to host node3 port 22: Connection timed out
   - this machine     excluded      nodes.include_local is false
 
-  1 problem.
-  Fix the unreachable nodes, or run capture --allow-partial to proceed without them.
+[2026-08-19 21:39:59] ERROR    check: 1 problem
+[2026-08-19 21:39:59] ERROR    check: fix the unreachable nodes, or run capture --allow-partial to proceed without them
 ```
 
 ---
@@ -148,16 +145,14 @@ writes the output file.
 
 ```console
 $ mlperf-sysinfo capture -c sysinfo.yaml
-
-  ✓ pre-flight check     passed -- 1 node(s), profile endpoints
-  ✓ collection           1 of 1 node(s) returned hardware
-
-  1 node(s) - 8 accelerators - profile endpoints
-
-  Written  results/h100_run1/system_desc.json
-  log      results/h100_run1/.mlperf-sysinfo/capture_20260819_202120.log
-
-  Next: mlperf-sysinfo show results/h100_run1/system_desc.json
+[2026-08-19 21:42:12] INFO     config: loaded config sysinfo.yaml (profile endpoints)
+[2026-08-19 21:42:12] INFO     collector: pre-flight check passed -- 1 node(s), profile endpoints
+[2026-08-19 21:42:12] INFO     collector: collecting with tags: get-mlperf-multi-node-system-info,_cuda,_endpoints
+[2026-08-19 21:42:18] INFO     collector: 1 of 1 node(s) returned hardware
+[2026-08-19 21:42:18] INFO     collector: wrote results/h100_run1/system_desc.json
+[2026-08-19 21:42:18] INFO     capture: 1 node(s) - 8 accelerators - profile endpoints
+[2026-08-19 21:42:18] INFO     capture: run log results/h100_run1/.mlperf-sysinfo/capture_20260819_214212.log
+[2026-08-19 21:42:18] INFO     capture: next: mlperf-sysinfo show results/h100_run1/system_desc.json
 ```
 
 Every run leaves a log beside the deliverable, timestamped so a retry does not
@@ -182,10 +177,9 @@ The full check report is printed and nothing is collected:
 ```console
 $ mlperf-sysinfo capture -c ph.yaml
   ...
-  5 problems.
-  Fill in the missing fields and run check again.
-
-error  nothing was collected
+[2026-08-19 21:39:59] ERROR    check: 5 problems
+[2026-08-19 21:39:59] ERROR    check: fill in the missing fields and run check again
+[2026-08-19 21:39:59] ERROR    capture: nothing was collected
 ```
 
 ### When collection comes back short
@@ -198,12 +192,11 @@ error  only 1 of 2 node(s) returned hardware. See .../capture_20260819_202120.lo
 With `--allow-partial`:
 
 ```console
-  ✓ pre-flight check     passed with warnings -- 1 node(s), profile endpoints
-  ✗ root@node3:22        skipped -- ssh: connection timed out
-  ! collection           only 1 of 2 node(s) returned hardware
-
-  Written (partial)  results/my_run/system_desc.json
-  One or more nodes did not answer. The file records this.
+[2026-08-19 21:42:12] INFO     collector: pre-flight check passed with warnings -- 1 node(s), profile endpoints
+[2026-08-19 21:42:12] WARNING  collector: root@node3:22 skipped -- ssh: connection timed out
+[2026-08-19 21:42:18] WARNING  collector: only 1 of 2 node(s) returned hardware
+[2026-08-19 21:42:18] INFO     collector: wrote results/my_run/system_desc.json
+[2026-08-19 21:42:18] WARNING  capture: the capture is partial -- one or more nodes did not answer, and the file records it
 ```
 
 Exit code `1`, and the file carries `"complete": false`.
@@ -269,7 +262,7 @@ $ mlperf-sysinfo validate results/h100_run1/system_desc.json
   file       results/h100_run1/system_desc.json
   profile    inference
 
-  Valid. 6 required field(s) present.
+[2026-08-19 21:42:30] INFO     report: valid -- 6 required field(s) present
 ```
 
 ```console
@@ -283,7 +276,7 @@ PROBLEMS
   ✗ endpoint_url is empty -- The endpoint under test, written to the submission as endpoint_url
   ✗ node_types[0].cooling still holds placeholder text: 'CHANGEME'
 
-  3 problem(s). This file is not ready to submit.
+[2026-08-19 21:42:30] ERROR    report: 3 problem(s) -- this file is not ready to submit
 ```
 
 `--profile` validates against a different profile than the one stamped in the
@@ -349,32 +342,37 @@ Misspelled config options get the same treatment — see
 
 ## Logging
 
-Alongside the styled blocks, the tool logs its own actions — config load,
-`extends` merging, each probe, what came back, what was written — with a date, a
-level and the module that did it:
+Output splits by **shape**, not by command.
+
+**Sentence-shaped output is log records.** `init`, `capture`'s status lines, and
+every command's verdict carry a date, a level and the name of whatever acted:
 
 ```console
-$ mlperf-sysinfo check -c sysinfo.yaml --log-level info
-[2026-08-19 20:47:33] INFO     config: loaded config sysinfo.yaml (profile endpoints)
-[2026-08-19 20:47:33] INFO     preflight: 5 of 5 required field(s) set for profile endpoints
-[2026-08-19 20:47:33] INFO     preflight: endpoint http://127.0.0.1:8000: no answer
-
-  profile    endpoints
-  ...
+[2026-08-19 21:42:18] INFO     collector: 1 of 1 node(s) returned hardware
+[2026-08-19 21:39:59] INFO     check: ready to capture
+[2026-08-19 21:42:30] ERROR    report: 3 problem(s) -- this file is not ready to submit
 ```
 
-**The run log file always keeps every level**, whatever the terminal is set to —
-see [the run log](architecture.md#the-run-log). The terminal default is `error`,
-which in practice means nothing extra: every warning a check produces is
-already a styled row, and printing it as a log line as well says the same thing
-twice in two formats a few lines apart. Ask for `info` or `debug` when you want
-the trace live.
+**Aligned tables stay tables.** The check report, `show`'s summary, `validate`'s
+problem list and the `profiles` listing keep their columns, because a
+31-character prefix on every row costs exactly the scannability a table exists
+for. So `check` is a record, then a table, then a record.
 
-These lines go to **stderr**, so redirecting the styled report keeps the trace
-out of it:
+Nothing is said twice. Where a table renders a fact — an unreachable node, an
+unset field — the log record for it is still *made*, because the run log needs
+it and a library caller has `run_check()` and no report to read it from, but the
+terminal drops it. `--log-level debug` shows those too, since at that point you
+have asked for everything.
+
+**The run log file always keeps every level**, whatever the terminal is set to —
+see [the run log](architecture.md#the-run-log).
+
+Log lines go to **stderr**, so redirecting the tables keeps the trace out of
+them, and the other way round:
 
 ```bash
-mlperf-sysinfo capture -c sysinfo.yaml --log-level info 2>trace.log
+mlperf-sysinfo capture -c sysinfo.yaml 2>trace.log   # tables on screen, trace in a file
+mlperf-sysinfo check -c sysinfo.yaml >report.txt     # trace on screen, tables in a file
 ```
 
 ## Colour

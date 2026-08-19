@@ -98,25 +98,34 @@ profile and no collection change.
 
 ### Logging
 
-Two streams, and the split matters. The styled blocks (`ui.py`) are the
-*summary* a person acts on. `logs.py` is the *trace* of what the tool did --
-`log = logs.get(__name__)` in each module, so a line reads
-`[2026-08-19 20:47:33] INFO     preflight: ...`.
+**Output splits by shape, not by command.** This is the rule to preserve.
 
+- **Sentence-shaped output is log records** (`logs.py`), so it carries a date, a
+  level and the name of whatever acted: `init`, `capture`'s status lines, and
+  every command's verdict (`check: ready to capture`, `report: 3 problem(s)`).
+- **Aligned tables stay tables** (`ui.py`): the check report, `show`'s summary,
+  `validate`'s problem list, `profiles`. A 31-character prefix on every row
+  costs the columns their scannability, which is what a table is for. So `check`
+  is a record, then a table, then a record.
+- **Nothing is said twice.** Where a table renders a fact, the record is still
+  made -- the run log needs it, and a library caller has `run_check()` and no
+  report -- but it is marked `extra=logs.STYLED` and the terminal handler drops
+  it. `--log-level debug` shows those too.
+- **Facts belong to whoever knows them.** `collector` logs the run's facts so
+  they exist with no CLI present; `cli` logs only what the collector cannot know
+  (its summary line, where the run log went, what to run next). The `progress`
+  callback stays for embedders and is logged at DEBUG, since every event it
+  carries is already logged by the collector under its own name.
 - **Levels are chosen for severity, not for the CLI.** An unreachable node is a
-  WARNING because a library caller has `run_check()` and no styled report to
-  read it from.
-- **The CLI's terminal default is therefore `error`**, not `warning`: it *does*
-  render a styled report, and every warning a check produces appears in it, so
-  a WARNING threshold printed each one twice in two formats a few lines apart.
-  `--log-level info|debug` (or `--verbose`) opens it up.
+  WARNING because a library caller has no styled report to read it from.
 - **The run log file always takes every level**, whatever the terminal shows.
   Records logged before the file exists are buffered and replayed into it.
 - `setup()` sets `propagate = False`, so an embedder that never calls it still
   sees these records through its own root handlers -- but when this package owns
   the terminal, nothing is printed twice.
-- New log calls must not restate what a styled block already prints at a
-  terminal-visible level. That is the one rule this layer can break invisibly.
+- Terminal default is `info`. `--log-level` defaults to `None` rather than to
+  `"info"` so an explicit `--log-level info` stays distinguishable from an
+  absent one; otherwise `--verbose` would silently override it.
 
 ### Two kinds of problem, handled differently
 

@@ -26,6 +26,15 @@ from .profiles import load as load_profile
 from .report import summarise, validate
 from .suggest import closest, did_you_mean
 
+#: One logger per command, so the module column names the command that acted
+#: ("init:", "capture:") rather than repeating "cli:" on every line.
+log = logs.get(__name__)
+_log_init = logs.get("mlperf_sysinfo.init")
+_log_capture = logs.get("mlperf_sysinfo.capture")
+_log_check = logs.get("mlperf_sysinfo.check")
+_log_profiles = logs.get("mlperf_sysinfo.profiles")
+_log_report = logs.get("mlperf_sysinfo.report")
+
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 EXIT_OK = 0
@@ -46,31 +55,42 @@ ConfigOpt = Annotated[
 
 #: What reaches the terminal when nothing is asked for.
 #:
-#: Levels are chosen for severity, not for this CLI: an unreachable node is a
-#: WARNING because a library caller has no styled report to read it from. But
-#: this CLI *does* render one, and every warning the check produces appears in
-#: it -- so leaving the terminal at WARNING printed each of them twice, in two
-#: formats, three lines apart. Hence "error": the trace stays one flag away and
-#: is in the run log regardless, while the styled blocks own the screen.
-DEFAULT_LOG_LEVEL = "error"
+#: Output splits by shape rather than by command. Sentence-shaped output --
+#: ``init``, and ``capture``'s status lines -- *is* log records, so it carries a
+#: date and a level like everything else. The aligned tables (``check``,
+#: ``show``, ``validate``, ``profiles``) stay as they are, because a 31-character
+#: prefix on every row costs the columns their scannability, which is the whole
+#: point of a table. Records whose fact one of those tables renders are marked
+#: ``logs.STYLED`` and dropped from the terminal so nothing is said twice.
+#:
+#: Levels themselves are chosen for severity, not for this CLI: an unreachable
+#: node is a WARNING because a library caller has ``run_check()`` and no styled
+#: report to read it from.
+DEFAULT_LOG_LEVEL = "info"
 
+#: None rather than the default string, so that an explicitly passed level is
+#: distinguishable from an absent one. Sharing a value with DEFAULT_LOG_LEVEL
+#: would let --verbose silently override "--log-level info".
 LogLevelOpt = Annotated[
-    str,
+    str | None,
     cyclopts.Parameter(
         name=["--log-level"],
-        help="Terminal log level: debug, info, warning or error. The run log keeps all of them.",
+        help=(
+            "Terminal log level: debug, info, warning or error. Defaults to info, "
+            "or debug with --verbose. The run log keeps every level regardless."
+        ),
     ),
 ]
 
 
-def _setup_logging(verbose: bool, level: str = DEFAULT_LOG_LEVEL) -> None:
+def _setup_logging(verbose: bool, level: str | None = None) -> None:
     """``--verbose`` is shorthand for ``--log-level debug``.
 
     An explicit level wins, so ``--verbose --log-level info`` still echoes the
     automation to the terminal without the debug detail.
     """
-    if level == DEFAULT_LOG_LEVEL and verbose:
-        level = "debug"
+    if level is None:
+        level = "debug" if verbose else DEFAULT_LOG_LEVEL
     try:
         logs.setup(level)
     except ValueError:
@@ -187,21 +207,20 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
     ui.blank()
     if report.ok:
         if report.network_checked:
-            print(f"  {ui.green('Ready to capture.')}")
+            _log_check.info("ready to capture")
         else:
-            print(f"  {ui.green('Config is valid.')}")
-            ui.hint("Nothing was reached -- run without --offline before capturing.")
+            _log_check.info("config is valid")
+            _log_check.info("nothing was reached -- run without --offline before capturing")
         return
 
     count = report.problem_count
     noun = "problem" if count == 1 else "problems"
-    print(f"  {ui.red(f'{count} {noun}.')}")
+    _log_check.error("%d %s", count, noun)
     if report.has_config_problems:
-        ui.hint("Fill in the missing fields and run check again.")
+        _log_check.error("fill in the missing fields and run check again")
     if report.has_reach_problems:
-        ui.hint(
-            "Fix the unreachable nodes, or run capture --allow-partial "
-            "to proceed without them."
+        _log_check.error(
+            "fix the unreachable nodes, or run capture --allow-partial to proceed without them"
         )
 
 
@@ -230,25 +249,29 @@ def init(
     """Write a starter config containing only the fields your profile needs."""
     template = _TEMPLATE_DIR / f"{profile}.yaml"
     if not template.exists():
-        ui.error(
-            f"no starter config for profile {profile!r}. "
-            f"Built-in profiles: {', '.join(available_profiles())}"
+        guess = did_you_mean(profile, available_profiles())
+        _log_init.error(
+            "no starter config for profile %r.%s Built-in profiles: %s",
+            profile,
+            guess,
+            ", ".join(available_profiles()),
         )
         return EXIT_ERROR
     if path.exists() and not force:
-        ui.error(f"{path} already exists. Pass --force to overwrite it.")
+        _log_init.error("%s already exists. Pass --force to overwrite it.", path)
         return EXIT_ERROR
 
     path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(template, path)
 
     loaded = load_profile(profile)
-    ui.blank()
-    print(f"  {ui.green('Written')} template {path.name} to path: {path.resolve()}")
-    ui.blank()
-    ui.hint(f"profile: {loaded.name}")
-    ui.blank()
-    ui.hint(f"Edit the template {path.name} before running the actual capture command.")
+    _log_init.debug("template source %s", template)
+    _log_init.info(
+        "wrote template %s (profile %s) to %s", path.name, loaded.name, path.resolve()
+    )
+    _log_init.info(
+        "edit it before running 'mlperf-sysinfo capture -c %s'", path.name
+    )
     return EXIT_OK
 
 
@@ -261,7 +284,7 @@ def check(
         cyclopts.Parameter(help="Validate the config only; do not touch the network."),
     ] = False,
     verbose: Annotated[bool, cyclopts.Parameter(name=["--verbose", "-v"])] = False,
-    log_level: LogLevelOpt = DEFAULT_LOG_LEVEL,
+    log_level: LogLevelOpt = None,
 ) -> int:
     """Validate the config and reach every node it names. Nothing is collected."""
     _setup_logging(verbose, log_level)
@@ -287,16 +310,18 @@ def capture(
         cyclopts.Parameter(help="A run_metadata file to patch with serving config values."),
     ] = None,
     verbose: Annotated[bool, cyclopts.Parameter(name=["--verbose", "-v"])] = False,
-    log_level: LogLevelOpt = DEFAULT_LOG_LEVEL,
+    log_level: LogLevelOpt = None,
 ) -> int:
     """Run the check, then collect and write the system description."""
     _setup_logging(verbose, log_level)
     cfg, profile = _load(config)
 
-    ui.blank()
-
+    # Every progress event is a fact the collector logs itself, under its own
+    # name -- the callback exists so an embedder can render them, not so they
+    # get said a second time here. DEBUG keeps them out of the default terminal
+    # while leaving them visible when you have asked for everything.
     def progress(kind: str, label: str, detail: str) -> None:
-        ui.row(_SYMBOLS.get(kind, " "), label, detail, "", 20)
+        _log_capture.debug("%s: %s", label, detail)
 
     try:
         result = run_capture(
@@ -308,35 +333,30 @@ def capture(
             verbose=verbose,
         )
     except CheckFailed as e:
+        # The check report is a table, so it keeps its styled form; the verdict
+        # about it is a sentence, so it is logged.
         if e.report is not None:
             out_file = cfg.output_dir / (cfg.output.file or profile.output_file)
             _render_check(e.report, out_file=out_file)
         else:  # pragma: no cover - defensive
-            ui.error(str(e))
-        ui.blank()
-        ui.error("nothing was collected")
+            _log_capture.error("%s", e)
+        _log_capture.error("nothing was collected")
         return EXIT_PROBLEMS
 
-    ui.blank()
     bits = [f"{result.nodes_collected} node(s)"]
     accel = result.accelerator_total
     if accel:
         bits.append(f"{accel} accelerators")
     bits.append(f"profile {profile.name}")
-    print("  " + ui.dim(" - ".join(bits)))
-    ui.blank()
+    _log_capture.info(" - ".join(bits))
 
-    if result.complete:
-        print(f"  {ui.green('Written')}  {result.output_path}")
-    else:
-        print(f"  {ui.yellow('Written (partial)')}  {result.output_path}")
-        ui.hint("One or more nodes did not answer. The file records this.")
-    for extra in result.extra_files:
-        print(f"  {ui.dim('also')}     {extra}")
+    if not result.complete:
+        _log_capture.warning(
+            "the capture is partial -- one or more nodes did not answer, and the file records it"
+        )
     if result.log_path:
-        print(f"  {ui.dim('log')}      {ui.dim(str(result.log_path))}")
-    ui.blank()
-    ui.hint(f"Next: mlperf-sysinfo show {result.output_path}")
+        _log_capture.info("run log %s", result.log_path)
+    _log_capture.info("next: mlperf-sysinfo show %s", result.output_path)
     return EXIT_OK if result.complete else EXIT_PROBLEMS
 
 
@@ -344,6 +364,7 @@ def capture(
 def show(path: Path) -> int:
     """Print a readable summary of a captured file."""
     s = summarise(path)
+    _log_report.info("read %s", Path(path).resolve())
 
     ui.blank()
     ui.kv("system", ui.bold(s.system_name), 12)
@@ -401,19 +422,22 @@ def validate_cmd(
         for warning in report.warnings:
             ui.row(ui.WARN, warning, "", "", 0)
 
-    ui.blank()
     if report.ok:
-        extra = f" {len(report.warnings)} warning(s)." if report.warnings else ""
-        print(f"  {ui.green('Valid.')} {report.checked} required field(s) present.{extra}")
+        extra = f", {len(report.warnings)} warning(s)" if report.warnings else ""
+        _log_report.info(
+            "valid -- %d required field(s) present%s", report.checked, extra
+        )
         return EXIT_OK
-    count = len(report.problems)
-    print(f"  {ui.red(f'{count} problem(s).')} This file is not ready to submit.")
+    _log_report.error(
+        "%d problem(s) -- this file is not ready to submit", len(report.problems)
+    )
     return EXIT_PROBLEMS
 
 
 @app.command(name="profiles")
 def profiles_cmd() -> int:
     """List the built-in profiles."""
+    _log_profiles.debug("%d built-in profile(s)", len(available_profiles()))
     ui.blank()
     for name in available_profiles():
         p = load_profile(name)

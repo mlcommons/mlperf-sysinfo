@@ -287,12 +287,14 @@ class TestACaptureLeavesOne:
             "Outcome   : partial -- only 1 of 2 node(s) answered" in result.log_path.read_text()
         )
 
-    def test_the_cli_prints_where_it_went(
+    def test_the_cli_reports_where_it_went(
         self, good_config_file, endpoints_profile, all_reachable, fake_mlc, capsys
     ):
+        """capture's status lines are sentence-shaped, so they are log records
+        on stderr rather than styled rows on stdout."""
         from mlperf_sysinfo.cli import capture as capture_cmd
 
         capture_cmd(config=good_config_file)
-        out = capsys.readouterr().out
-        assert "log " in out
-        assert "capture_" in out and ".log" in out
+        err = capsys.readouterr().err
+        assert "run log " in err
+        assert "capture_" in err and ".log" in err

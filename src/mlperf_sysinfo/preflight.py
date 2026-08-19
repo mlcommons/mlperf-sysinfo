@@ -30,6 +30,7 @@ from .config import (
     is_filled,
     is_placeholder,
 )
+from .logs import STYLED
 from .profiles import Profile
 
 SSH_TIMEOUT = 15
@@ -294,11 +295,14 @@ def run_check(
                 ("power.redfish.endpoint", "BMC address for power capture")
             )
 
+    # Every one of these is an aligned row in the check report, so the record
+    # is kept for the file and for library callers but not printed twice.
     log.info(
         "%d of %d required field(s) set for profile %s",
         report.satisfied_count,
         len(profile.requires),
         profile.name,
+        extra=STYLED,
     )
     for path, _ in report.missing_required:
         log.debug("required field not set: %s", path)
@@ -321,9 +325,11 @@ def run_check(
             if node.reachable:
                 log.debug("%s reachable -- %s", node.label, node.detail)
             else:
-                # In the styled block too, but a log that omits why a run
-                # stopped is not worth keeping.
-                log.warning("%s unreachable -- %s", node.label, node.detail)
+                # WARNING because a library caller has run_check() and no
+                # styled report; STYLED because this CLI does render one.
+                log.warning(
+                    "%s unreachable -- %s", node.label, node.detail, extra=STYLED
+                )
 
     if profile.collect.endpoint_probe and config.serving.is_probeable:
         log.debug("probing endpoint %s", config.serving.url)
@@ -332,6 +338,7 @@ def run_check(
             "endpoint %s: %s",
             config.serving.url,
             report.endpoint.detail if report.endpoint.ok else "no answer",
+            extra=STYLED,
         )
 
     if profile.collect.serving_log and config.serving.node:
@@ -342,6 +349,7 @@ def run_check(
             "serving log %s: %s",
             config.serving.log,
             "found" if report.serving_log.ok else report.serving_log.detail,
+            extra=STYLED,
         )
 
     return report
