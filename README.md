@@ -39,11 +39,11 @@ $ mlperf-sysinfo init endpoints
 
 **Step 2 -- edit `sysinfo.yaml`**
 
-Fill in a system name, your organisation, a contact email, and the model
-being served. `nodes.include_local` is already `true` with an empty `ssh`
-list, so leave that section alone. For a CPU-only capture, set
-`accelerator: none` and drop the `serving:` block entirely -- both fields
-are optional here, and skipping them is a warning, not an error.
+Fill in a system name, the division, and the endpoint you served against.
+`nodes.include_local` is already `true` with an empty `ssh` list, so leave
+that section alone. For a CPU-only capture, set `accelerator: none` and drop
+`serving.node` -- without it the parallelism and batch settings are simply
+not read, which is a warning rather than an error.
 
 ```yaml
 profile: endpoints
@@ -61,13 +61,18 @@ nodes:
   include_local: true
   ssh: []
 
+serving:
+  url: http://127.0.0.1:8000
+
 submission:
-  submitter: MyOrg
-  contact: mlperf@myorg.example
   division: standardized
-  model:
-    name: Llama-3.1-8B-Instruct
 ```
+
+`serving.url` is required because it is written to the submission as
+`endpoint_url`. `check` probes it, but nothing answering is only a warning --
+the value is submission metadata, not a liveness test. Rules 8.2 also allow a
+description in place of a URL, for a hosted endpoint with no public address:
+`url: "Managed endpoint, us-east-1, no public URL"` is accepted and not probed.
 
 **Step 3 -- check the config**
 
@@ -85,16 +90,20 @@ $ mlperf-sysinfo check -c sysinfo.yaml
   output     results/sysinfo/system_desc.json
 
 NODES
-  ✓ this machine   included
+  ✓ this machine            included
+
+SERVING
+  ! http://127.0.0.1:8000   no answer   no serving framework answered
 
 REQUIRED BY PROFILE 'ENDPOINTS'
-  ✓ 7 fields set
+  ✓ 5 fields set
 
 WORTH FILLING IN
-  ! serving.url                  empty   Enables framework and version detection from the live endpoint
-  ! serving.node                 empty   Enables parallelism and batch settings to be read from the startup log
-  ! submission.model.precision   empty   Reviewers ask for this almost every round
-  ! submission.dataset.name      empty   Identifies what the system was serving
+  ! system.cooling              empty   Reviewers ask how the nodes are cooled
+  ! serving.node                empty   Enables parallelism and batch settings to be read from the startup log
+  ! submission.notes.hardware   empty   Becomes hw_notes on every node type
+  ! submission.notes.software   empty   Becomes sw_notes on every node type
+  ! run.link_config             empty   Reviewers use it to reproduce the run
 
   Ready to capture.
 ```
@@ -145,7 +154,13 @@ $ mlperf-sysinfo validate results/sysinfo/system_desc.json
   file       results/sysinfo/system_desc.json
   profile    endpoints (v6.0 rules)
 
-  Valid. 7 required field(s) present.
+WARNINGS
+  ! cooling on every node type is empty -- Reviewers ask how the nodes are cooled
+  ! hw_notes on every node type is empty -- Becomes hw_notes on every node type
+  ! sw_notes on every node type is empty -- Becomes sw_notes on every node type
+  ! link_config is empty -- Reviewers use it to reproduce the run
+
+  Valid. 5 required field(s) present. 4 warning(s).
 ```
 
 </details>
@@ -178,12 +193,13 @@ serving:
   log: /tmp/serving.log
 
 submission:
-  submitter: MyOrg
-  contact: mlperf@myorg.example
   division: standardized
-  model:
-    name: Llama-3.1-8B-Instruct
-    precision: fp8
+  notes:
+    hardware: ""
+    software: ""
+
+run:
+  link_config: https://github.com/myorg/submission/tree/main/configs
 ```
 
 Three rules worth knowing:
@@ -196,7 +212,11 @@ Three rules worth knowing:
 - **The same file works embedded.** Drop it under a `system_info:` key in a
   benchmark config and it validates identically.
 
-Use `extends: ~/.mlperf/org.yaml` to share submitter details across configs.
+Use `extends: ~/.mlperf/org.yaml` to share defaults across configs.
+
+Model, dataset and concurrency details are deliberately absent: for Endpoints
+they are measurement point metadata (endpoints rules 8.3) and belong in each
+point's `points/<point>/config.yml`, which this tool does not write.
 
 ## Profiles
 

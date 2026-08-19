@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_origin
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -67,6 +67,7 @@ def deep_merge(base: dict, override: dict) -> dict:
         else:
             out[key] = value
     return out
+
 
 
 def dotted_get(data: Any, path: str) -> Any:
@@ -262,19 +263,31 @@ class ServingConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    url: str | None = Field(default=None, description="Probed for framework name and version.")
+    url: str | None = Field(
+        default=None,
+        description=(
+            "The endpoint under test, written to an Endpoints submission as "
+            "endpoint_url. An http(s) URL is also probed for the framework "
+            "name and version."
+        ),
+    )
     node: str | None = Field(default=None, description="Where the server process runs.")
     log: str = Field(
         default="/tmp/serving.log", description="Startup log parsed for parallelism settings."
     )
     framework: Literal["auto", "vllm", "sglang", "trtllm"] = "auto"
 
-    @field_validator("url")
-    @classmethod
-    def _url_scheme(cls, v: str | None) -> str | None:
-        if v is not None and not v.startswith(("http://", "https://")):
-            raise ValueError(f"serving.url must start with http:// or https://, got {v!r}")
-        return v
+    @property
+    def is_probeable(self) -> bool:
+        """Whether ``url`` is something an HTTP probe could reach.
+
+        Endpoints rules 8.2 define ``endpoint_url`` as "URL or description of
+        the endpoint under test", so a Serviced submission against a hosted
+        API with no public URL can put prose here. That is a valid answer, and
+        rejecting it would make those submissions uncapturable -- but there is
+        nothing to probe, so detection is skipped rather than attempted.
+        """
+        return bool(self.url and self.url.startswith(("http://", "https://")))
 
     @field_validator("node")
     @classmethod
@@ -300,28 +313,6 @@ class PowerConfig(BaseModel):
     redfish: RedfishConfig | None = None
 
 
-class ModelInfo(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str | None = None
-    name: str | None = None
-    precision: str | None = None
-    link: str | None = None
-    transformation_link: str | None = None
-    notes: str | None = None
-
-
-class DatasetInfo(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str | None = None
-    name: str | None = None
-    type: str | None = None
-    link: str | None = None
-    input_token_average: str | int | None = None
-    output_token_average: str | int | None = None
-
-
 class NotesInfo(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -331,18 +322,49 @@ class NotesInfo(BaseModel):
 
 
 class SubmissionConfig(BaseModel):
-    """The paperwork."""
+    """The paperwork.
+
+    Model and dataset details used to live here. For Endpoints they moved to
+    the measurement point config (``points/<point>/config.yml``, endpoints
+    rules 8.3), which this tool does not write -- see ``MIGRATED_PATHS``.
+    ``submitter``/``contact`` are still part of an MLPerf Inference system
+    description, so they stay in the schema; the endpoints profile no longer
+    asks for them.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     submitter: str | None = None
     contact: str | None = None
     division: str | None = None
-    model: ModelInfo = Field(default_factory=ModelInfo)
-    dataset: DatasetInfo = Field(default_factory=DatasetInfo)
     notes: NotesInfo = Field(default_factory=NotesInfo)
     container_link: str | None = None
-    measured_accuracy_score: str | float | None = None
+
+
+class RunConfig(BaseModel):
+    """How the stack was configured for this run (endpoints rules 8.2).
+
+    The parallelism degrees and batch size are read from the server's startup
+    log, so they are not here. These three cannot be detected from anything on
+    the machine -- only the submitter knows them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_config: str | None = Field(
+        default=None,
+        description=(
+            "Prose description of how nodes are configured for this run. "
+            "Defaults to a summary of nodes.groups when that is set."
+        ),
+    )
+    config_summary_notes: str | None = Field(
+        default=None,
+        description="Anything the parallelism fields do not capture. Folded into config_summary.",
+    )
+    link_config: str | None = Field(
+        default=None, description="Link to the full configuration logs for this run."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +388,7 @@ class SysinfoConfig(BaseModel):
     serving: ServingConfig = Field(default_factory=ServingConfig)
     power: PowerConfig = Field(default_factory=PowerConfig)
     submission: SubmissionConfig = Field(default_factory=SubmissionConfig)
+    run: RunConfig = Field(default_factory=RunConfig)
 
     #: Populated by the loader, not by the file.
     source_path: Path | None = Field(default=None, exclude=True)
@@ -409,6 +432,79 @@ EMBED_KEYS = ("system_info", "sysinfo")
 _MAX_EXTENDS_DEPTH = 8
 
 
+def _container_default(annotation: Any) -> Any | None:
+    """What an empty value of this annotation should become, or None to leave it.
+
+    Only *non-optional* containers get a default. ``power.redfish`` is
+    ``RedfishConfig | None``, where a bare ``redfish:`` means "no BMC capture"
+    -- turning that into ``{}`` would demand an endpoint the submitter
+    deliberately did not give. A plain scalar is left alone for the same
+    reason: ``cooling:`` means "unset", which is a valid answer.
+    """
+    try:
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            return {}
+    except TypeError:  # a subscripted generic, e.g. list[str] on 3.10
+        pass
+    origin = get_origin(annotation)
+    if origin is list:
+        return []
+    if origin is dict:
+        return {}
+    return None
+
+
+def _submodel(annotation: Any) -> type[BaseModel] | None:
+    try:
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            return annotation
+    except TypeError:
+        pass
+    return None
+
+
+def drop_empty_sections(data: Any, model: type[BaseModel] | None = None) -> Any:
+    """Treat a section whose every entry is commented out as absent.
+
+        run:
+          # link_config: https://...
+
+    parses as ``None``, and rejecting that as a type error punishes the
+    submitter for tidying up a template. Which keys get this treatment comes
+    from the schema, not from the shape of the value: only non-optional
+    containers, so an unset scalar stays unset (see ``_container_default``).
+
+    This runs per document, *before* ``extends`` merging, so an empty child
+    section falls back to the parent's values instead of erasing them --
+    coercing after the merge would silently discard everything inherited.
+    """
+    if model is None:
+        model = SysinfoConfig
+    if not isinstance(data, dict):
+        return data
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        # A benchmark config carrying a sysinfo section: recurse into it with
+        # the right schema rather than leaving it untouched.
+        if key in EMBED_KEYS and isinstance(value, dict):
+            out[key] = drop_empty_sections(value, SysinfoConfig)
+            continue
+        field = model.model_fields.get(key)
+        if field is None:  # not ours -- an embedding host's own keys
+            out[key] = value
+            continue
+        if value is None:
+            default = _container_default(field.annotation)
+            out[key] = value if default is None else default
+            continue
+        submodel = _submodel(field.annotation)
+        # Only descend where there is a schema to descend with. Reusing the
+        # parent model would read a nodes.groups key named after a real field
+        # as if it were that field.
+        out[key] = drop_empty_sections(value, submodel) if submodel else value
+    return out
+
+
 def _read_yaml(path: Path) -> dict:
     if not path.exists():
         raise ConfigError(f"config file not found: {path}")
@@ -420,7 +516,7 @@ def _read_yaml(path: Path) -> dict:
         raw = {}
     if not isinstance(raw, dict):
         raise ConfigError(f"{path}: expected a YAML mapping, got {type(raw).__name__}")
-    return raw
+    return drop_empty_sections(raw)
 
 
 def _unwrap(data: dict) -> dict:
@@ -476,6 +572,28 @@ def load_config(path: str | Path) -> SysinfoConfig:
     return config
 
 
+#: Options this tool used to accept and no longer does, mapped to where the
+#: answer now belongs. A config written for an earlier round still parses far
+#: enough to reach here, so saying "unknown option" would be actively
+#: misleading -- the submitter did not misspell anything, the field moved.
+#:
+#: For Endpoints, model and dataset details are now measurement-point
+#: metadata (endpoints rules 8.3, ``points/<point>/config.yml``) rather than
+#: system description metadata, and this tool does not write that file.
+_POINT_CONFIG = (
+    "moved to the measurement point config (points/<point>/config.yml, "
+    "endpoints rules 8.3), which mlperf-sysinfo does not write -- delete it here"
+)
+
+MIGRATED_PATHS: dict[str, str] = {
+    "submission.model": _POINT_CONFIG,
+    "submission.dataset": _POINT_CONFIG,
+    "submission.measured_accuracy_score": (
+        "no longer part of the system description -- delete it here"
+    ),
+}
+
+
 def _format_validation_error(path: Path, error: ValidationError) -> str:
     """Turn pydantic's output into something a person can act on."""
     lines = [f"{path}: config is not valid"]
@@ -483,6 +601,8 @@ def _format_validation_error(path: Path, error: ValidationError) -> str:
         loc = ".".join(str(p) for p in err["loc"]) or "(root)"
         msg = err["msg"]
         if err["type"] == "extra_forbidden":
-            msg = "unknown option -- check the spelling, or see 'mlperf-sysinfo init'"
+            msg = MIGRATED_PATHS.get(
+                loc, "unknown option -- check the spelling, or see 'mlperf-sysinfo init'"
+            )
         lines.append(f"  {loc}: {msg}")
     return "\n".join(lines)

@@ -12,3 +12,4 @@ htmlcov/
 .DS_Store
 uv.lock
 site/
+mlperf-sysinfo-run-test/

@@ -19,7 +19,7 @@ from mlperf_sysinfo import profiles
 from mlperf_sysinfo.collector import RAW_FILENAME, WORK_DIRNAME, capture
 from mlperf_sysinfo.config import find_placeholders, is_placeholder, load_config
 from mlperf_sysinfo.errors import CaptureError
-from mlperf_sysinfo.output import build_nested, compute_system_size, is_not_detected
+from mlperf_sysinfo.output import accelerator_count, build_endpoints, is_not_detected
 from mlperf_sysinfo.preflight import NodeStatus, ProbeStatus, run_check
 from mlperf_sysinfo.report import validate
 
@@ -45,19 +45,19 @@ class TestValidateCatchesChangeme:
 
     def test_changeme_in_output_is_refused(self, tmp_path):
         data = copy.deepcopy(GOOD_CAPTURE)
-        data["submitter_org_names"] = "CHANGEME"
+        data["system_name"] = "CHANGEME"
         report = validate(write_capture(tmp_path, data))
         assert not report.ok
         assert any("placeholder" in p for p in report.problems)
 
     def test_changeme_with_a_suffix_is_refused(self, tmp_path):
         data = copy.deepcopy(GOOD_CAPTURE)
-        data["submitter_contact"] = "CHANGEME@example.com"
+        data["link_config"] = "CHANGEME@example.com"
         assert not validate(write_capture(tmp_path, data)).ok
 
     def test_angle_bracket_placeholder_is_refused(self, tmp_path):
         data = copy.deepcopy(GOOD_CAPTURE)
-        data["model_name"] = "<your model here>"
+        data["node_config"] = "<your node layout here>"
         assert not validate(write_capture(tmp_path, data)).ok
 
 
@@ -83,11 +83,11 @@ class TestCheckScansEveryField:
         self, tmp_path, endpoints_profile, all_reachable
     ):
         data = copy.deepcopy(GOOD_CONFIG)
-        data["system"]["cooling"] = "CHANGEME"
+        data["submission"]["container_link"] = "CHANGEME"
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         report = run_check(cfg, endpoints_profile)
         assert report.has_config_problems
-        assert any(p == "system.cooling" for p, _ in report.placeholder_other)
+        assert any(p == "submission.container_link" for p, _ in report.placeholder_other)
 
     def test_insert_here_text_blocks(self, tmp_path, endpoints_profile, all_reachable):
         data = copy.deepcopy(GOOD_CONFIG)
@@ -173,50 +173,56 @@ class TestStaleIntermediate:
         assert siblings == {"system_desc.json"}
 
 
-class TestNestedKeepsEveryField:
-    """Defect 5: sw_notes and type_detail were silently dropped."""
+class TestEndpointsKeepsEveryField:
+    """Defect 5: sw_notes was silently dropped.
+
+    8.2.1 puts hw_notes and sw_notes inside each node type rather than at the
+    top level, and neither the automation nor the earlier shaping code wrote
+    sw_notes there at all -- submission.notes.software went nowhere.
+    """
 
     def test_software_notes_survive(self, tmp_path, collected):
         data = copy.deepcopy(GOOD_CONFIG)
         data["submission"]["notes"] = {"hardware": "hw note", "software": "sw note"}
-        data["system"]["type_detail"] = "rack detail"
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
-        out = build_nested(collected, cfg)
-        assert out["sw_notes"] == "sw note"
-        assert out["hw_notes"] == "hw note"
-        assert out["system_type_detail"] == "rack detail"
+        node = build_endpoints(collected, cfg)["node_types"][0]
+        assert node["sw_notes"] == "sw note"
+        assert node["hw_notes"] == "hw note"
 
-    def test_every_config_field_reaches_one_of_the_shapes(self, good_config_file, collected):
+    def test_every_config_field_reaches_the_node_types(self, good_config_file, collected):
         cfg = load_config(good_config_file)
-        out = build_nested(collected, cfg)
-        for key in ("cooling", "container_link", "other_hardware"):
-            assert key in out
+        node = build_endpoints(collected, cfg)["node_types"][0]
+        for key in ("cooling", "container_link", "other_hardware", "hw_notes", "sw_notes"):
+            assert key in node
 
 
 class TestNumericCoercion:
     """Defect 6: string counts multiplied as strings; counts read as undetected."""
 
     def test_string_node_count(self):
-        entries = [
-            {"number_of_nodes": "2", "accelerator_model_name": "H100", "accelerators_per_node": 8}
+        node_types = [
+            {"number_of_nodes": "2", "accelerator_info": [{"accelerators_per_node": 8}]}
         ]
-        assert compute_system_size(entries) == "16x H100"
+        assert accelerator_count(node_types) == 16
 
     def test_string_per_node_count(self):
-        entries = [
-            {"number_of_nodes": 2, "accelerator_model_name": "H100", "accelerators_per_node": "8"}
+        node_types = [
+            {"number_of_nodes": 2, "accelerator_info": [{"accelerators_per_node": "8"}]}
         ]
-        assert compute_system_size(entries) == "16x H100"
+        assert accelerator_count(node_types) == 16
 
     def test_numeric_strings_are_valid_counts(self):
         assert not is_not_detected("8")
         assert not is_not_detected("112")
 
-    def test_a_numeric_model_name_is_still_a_failure(self):
-        entries = [
-            {"number_of_nodes": 1, "accelerator_model_name": "0", "accelerators_per_node": 8}
+    def test_an_undetected_count_is_not_multiplied(self):
+        node_types = [
+            {
+                "number_of_nodes": 2,
+                "accelerator_info": [{"accelerators_per_node": "Not detected: no driver"}],
+            }
         ]
-        assert compute_system_size(entries) == ""
+        assert accelerator_count(node_types) == 0
 
 
 class TestGroupsCheckedEarly:

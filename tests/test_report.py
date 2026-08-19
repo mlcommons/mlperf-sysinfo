@@ -13,26 +13,40 @@ from mlperf_sysinfo.errors import ConfigError
 from mlperf_sysinfo.report import summarise, validate
 
 GOOD_CAPTURE = {
-    "submitter_org_names": "MyOrg",
-    "submitter_contact": "a@b.com",
-    "system_name": "H100x8_vLLM",
-    "system_category": "datacenter",
-    "system_availability_status": "available",
-    "system_size": "16x NVIDIA H100",
     "division": "standardized",
-    "model_name": "Llama-3.1-8B",
-    "model_precision": "fp8",
-    "dataset_name": "cnn_dailymail",
-    "serving_framework": "vLLM 0.9.0",
+    "system_name": "H100x8_vLLM",
+    "system_availability_status": "available",
+    "system_category": "datacenter",
+    "system_size": "16x NVIDIA H100",
+    "system_node_ensemble_count": 1,
     "system_node_ensemble_total": 2,
+    "endpoint_url": "http://node1:8000",
+    "serving_framework": "vLLM 0.9.0",
     "node_types": [
         {
+            "system_node_ensemble_id": 1,
             "number_of_nodes": 2,
-            "accelerator_model_name": "NVIDIA H100",
-            "accelerators_per_node": 8,
             "host_processor_model_name": "AMD EPYC 9654",
+            "host_memory_capacity": "1.5 TB",
+            "accelerator_info": [
+                {
+                    "accelerator_model_name": "NVIDIA H100",
+                    "accelerators_per_node": 8,
+                    "accelerator_memory_capacity": "80GiB",
+                }
+            ],
+            "cooling": "air",
+            "hw_notes": "hw note",
+            "sw_notes": "sw note",
+            "operating_system": "Ubuntu 22.04",
         }
     ],
+    "node_config": "",
+    "tensor_parallel": 8,
+    "batch": 256,
+    "config_summary": "TP 8",
+    "config_summary_notes": "",
+    "link_config": "https://example.invalid/configs",
     "mlperf_sysinfo": {
         "version": "0.1.0",
         "profile": "endpoints",
@@ -60,14 +74,22 @@ class TestValidate:
 
     def test_empty_required_field_is_a_problem(self, tmp_path):
         data = copy.deepcopy(GOOD_CAPTURE)
-        data["submitter_contact"] = ""
+        data["endpoint_url"] = ""
         report = validate(write_capture(tmp_path, data))
         assert not report.ok
-        assert any("submitter_contact" in p for p in report.problems)
+        assert any("endpoint_url" in p for p in report.problems)
 
     def test_placeholder_text_is_caught(self, tmp_path):
         data = copy.deepcopy(GOOD_CAPTURE)
-        data["submitter_org_names"] = "Insert your organization name here"
+        data["system_category"] = "Insert system category here"
+        report = validate(write_capture(tmp_path, data))
+        assert not report.ok
+        assert any("placeholder" in p for p in report.problems)
+
+    def test_placeholder_inside_a_node_type_is_caught(self, tmp_path):
+        """The per-node metadata is where the config's notes and cooling land."""
+        data = copy.deepcopy(GOOD_CAPTURE)
+        data["node_types"][0]["cooling"] = "CHANGEME"
         report = validate(write_capture(tmp_path, data))
         assert not report.ok
         assert any("placeholder" in p for p in report.problems)
@@ -111,6 +133,68 @@ class TestValidate:
             validate(p)
 
 
+class TestNodeScopedFields:
+    """cooling, hw_notes and sw_notes moved inside node_types in 8.2.1.
+
+    check warns when they are empty, so validate has to look at them too --
+    otherwise the two commands disagree about the same file.
+    """
+
+    def test_an_empty_node_level_recommendation_warns(self, tmp_path):
+        data = copy.deepcopy(GOOD_CAPTURE)
+        data["node_types"][0]["cooling"] = ""
+        report = validate(write_capture(tmp_path, data))
+        assert report.ok  # a recommendation, so not a problem
+        assert any("cooling on every node type is empty" in w for w in report.warnings)
+
+    def test_one_node_type_differing_from_another_is_not_a_gap(self, tmp_path):
+        data = copy.deepcopy(GOOD_CAPTURE)
+        second = copy.deepcopy(data["node_types"][0])
+        second["system_node_ensemble_id"] = 2
+        second["cooling"] = ""
+        data["node_types"].append(second)
+        report = validate(write_capture(tmp_path, data))
+        assert not any("cooling" in w for w in report.warnings)
+
+    def test_a_detection_failure_is_surfaced(self, tmp_path):
+        """"N/A" is the probe saying it looked and found nothing. Left alone it
+        reads to a reviewer like "not applicable"."""
+        data = copy.deepcopy(GOOD_CAPTURE)
+        data["node_types"][0]["host_memory_configuration"] = "N/A"
+        report = validate(write_capture(tmp_path, data))
+        assert any(
+            "node_types[0].host_memory_configuration was not detected" in w
+            for w in report.warnings
+        )
+
+    def test_a_detection_failure_inside_accelerator_info_is_surfaced(self, tmp_path):
+        data = copy.deepcopy(GOOD_CAPTURE)
+        data["node_types"][0]["accelerator_info"][0]["accelerator_interconnect"] = "N/A"
+        report = validate(write_capture(tmp_path, data))
+        assert any(
+            "node_types[0].accelerator_info[0].accelerator_interconnect was not detected" in w
+            for w in report.warnings
+        )
+
+    def test_a_real_value_is_not_flagged(self, tmp_path):
+        report = validate(write_capture(tmp_path, GOOD_CAPTURE))
+        assert not any("was not detected" in w for w in report.warnings)
+
+    def test_a_flat_capture_is_scanned_too(self, tmp_path):
+        """A flat file has no node_types, so scanning only those found nothing.
+        The collection script blanks "N/A" for flat but not "Not detected"."""
+        data = {
+            "submitter": "MyOrg",
+            "system_name": "sut",
+            "number_of_nodes": 1,
+            "host_processor_model_name": "EPYC",
+            "accelerator_frequency": "Not detected: nvidia-smi absent",
+            "mlperf_sysinfo": {"profile": "inference", "shape": "flat", "complete": True},
+        }
+        report = validate(write_capture(tmp_path, data))
+        assert any("accelerator_frequency was not detected" in w for w in report.warnings)
+
+
 class TestShow:
     def test_summarises_the_headline_facts(self, tmp_path):
         s = summarise(write_capture(tmp_path, GOOD_CAPTURE))
@@ -125,7 +209,8 @@ class TestShow:
         detected = dict(s.detected)
         supplied = dict(s.supplied)
         assert "cpu" in detected
-        assert "submitter" in supplied
+        assert detected["accelerator"] == "NVIDIA H100"
+        assert "division" in supplied
         assert "cpu" not in supplied
 
     def test_marks_a_partial_file(self, tmp_path):

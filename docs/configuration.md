@@ -44,19 +44,23 @@ power:                             # optional, opt-in
     password: ${BMC_PASSWORD}
 
 submission:                        # the paperwork
-  submitter: MyOrg
-  contact: mlperf@myorg.example
   division: standardized
-  model:
-    name: Llama-3.1-8B-Instruct
-    precision: fp8
-  dataset:
-    name: cnn_dailymail
-    type: text
+  container_link: https://...
   notes:
     hardware: ""
     software: ""
+
+run:                               # how the stack was configured for this run
+  node_config: "prefill: 2x H100; decode: 6x H100"
+  config_summary_notes: ""
+  link_config: https://github.com/myorg/submission/tree/main/configs
 ```
+
+!!! note "Model and dataset details are not here"
+    For Endpoints they are measurement point metadata (endpoints rules 8.3)
+    and belong in each point's `points/<point>/config.yml`, which this tool
+    does not write. A config that still sets `submission.model` or
+    `submission.dataset` is rejected with a message saying where they went.
 
 ## Reference
 
@@ -82,9 +86,9 @@ submission:                        # the paperwork
 | `category` | string | e.g. `datacenter`, `edge` |
 | `availability` | string | e.g. `available`, `preview`, `rdi` |
 | `accelerator` | enum | `cuda` \| `rocm` \| `xpu` \| `none`. Without it, accelerators are not probed |
-| `cooling` | string | e.g. `air`, `liquid` |
-| `type_detail` | string | Free text |
-| `size` | string | Overrides the computed `system_size`. Rarely needed |
+| `cooling` | string | e.g. `air`, `liquid`, `passive` |
+| `type_detail` | string | Free text. `inference` only — not part of an Endpoints system description |
+| `size` | string | Overrides the computed `system_size`. Rarely needed — see [Outputs](outputs.md#system_size) for what each profile computes |
 
 ### `nodes`
 
@@ -107,7 +111,7 @@ section entirely.
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `url` | string | — | Probed over HTTP for framework name and version |
+| `url` | string | — | The endpoint under test. Written to an Endpoints submission as `endpoint_url`, and required by that profile. An `http(s)` URL is also probed for the framework name and version; rules 8.2 allow a plain description instead ("Managed endpoint, no public URL"), which is accepted and simply not probed |
 | `node` | string | — | SSH target where the server process runs |
 | `log` | path | `/tmp/serving.log` | Startup log, parsed for parallelism and batch settings |
 | `framework` | enum | `auto` | `auto` \| `vllm` \| `sglang` \| `trtllm` |
@@ -132,11 +136,28 @@ collected — listing it twice is not required.
 
 | Key | Notes |
 | --- | --- |
-| `submitter`, `contact`, `division` | Required by both built-in profiles |
-| `model.{id,name,precision,link,transformation_link,notes}` | |
-| `dataset.{id,name,type,link,input_token_average,output_token_average}` | |
+| `division` | Required by both built-in profiles |
+| `submitter`, `contact` | Required by `inference`. Not part of an Endpoints system description |
 | `notes.{hardware,software,other_hardware}` | Become `hw_notes` / `sw_notes` / `other_hardware` |
-| `container_link`, `measured_accuracy_score` | |
+| `container_link` | Link to the container the submission ran in |
+
+### `run`
+
+The run configuration from endpoints rules 8.2. The parallelism degrees
+(`tensor_parallel` and friends) and `batch` are read from `serving.log`, so
+they are not settable here — these three cannot be detected from anything on
+the machine.
+
+| Key | Notes |
+| --- | --- |
+| `node_config` | Prose description of the node layout. Defaults to a summary of `nodes.groups` |
+| `config_summary_notes` | Anything the parallelism fields do not capture. Folded into `config_summary` |
+| `link_config` | Link to the full configuration logs for the run |
+
+A section or list whose entries are all commented out is treated as absent, so
+deleting the last line under `run:` — or under `nodes.ssh` — is not an error.
+An individual key left blank (`cooling:`) means *unset*, which is a different
+thing and stays that way.
 
 ## Three mechanisms
 
@@ -154,8 +175,9 @@ inside lists. An unset variable is a config problem, reported against its path:
 ```yaml
 # ~/.mlperf/org.yaml
 submission:
-  submitter: MyOrg
-  contact: mlperf@myorg.example
+  division: standardized
+run:
+  link_config: https://github.com/myorg/submission/tree/main/configs
 ```
 
 ```yaml
@@ -185,7 +207,7 @@ system_info:
   nodes:
     ssh: [root@node1]
   submission:
-    submitter: MyOrg
+    division: standardized
     # ...
 ```
 

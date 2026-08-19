@@ -136,19 +136,22 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
     for ref in report.unresolved_env:
         ui.row(ui.BAD, ref, ui.red("unset"), "not found in the environment", fwidth)
 
-    if report.placeholder_other:
+    # Recommended fields appear here rather than under "worth filling in":
+    # starter text is a problem wherever it is, and only emptiness is a warning.
+    # The two lists carry different second elements -- a reason for the ones a
+    # profile names, the offending value for the ones it does not -- so they
+    # are rendered separately rather than concatenated.
+    if report.placeholder_recommended or report.placeholder_other:
         ui.heading("still starter text")
+        for path, why in report.placeholder_recommended:
+            ui.row(ui.BAD, path, ui.red("placeholder"), f"still the starter value -- {why}", fwidth)
         for path, value in report.placeholder_other:
             ui.row(ui.BAD, path, ui.red("placeholder"), repr(value), fwidth)
 
-    if report.missing_recommended or report.placeholder_recommended:
+    if report.missing_recommended:
         ui.heading("worth filling in")
         for path, why in report.missing_recommended:
             ui.row(ui.WARN, path, ui.yellow("empty"), why, fwidth)
-        for path, why in report.placeholder_recommended:
-            ui.row(
-                ui.WARN, path, ui.yellow("placeholder"), f"still the starter value -- {why}", fwidth
-            )
 
     ui.blank()
     if report.ok:

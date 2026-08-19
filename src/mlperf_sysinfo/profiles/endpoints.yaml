@@ -4,29 +4,34 @@ name: endpoints
 title: MLPerf Endpoints
 round: "6.0"
 description: >-
-  Inference-serving endpoints. Keeps the multi-node structure in the output so
-  heterogeneous and disaggregated systems stay legible.
+  Inference-serving endpoints. Writes the system description defined by
+  endpoints rules 8.2, in the 8.2.1 template shape, so heterogeneous and
+  disaggregated systems stay legible.
 
 output_file: system_desc.json
 shape: nested
+benchmark: endpoints
 
 collect:
   serving_log: true
   endpoint_probe: true
   redfish: true
 
+# Model, dataset and concurrency details are no longer system description
+# metadata: they belong to the measurement point (rules 8.3,
+# points/<point>/config.yml), which this tool does not write. Nothing here
+# should ask for them.
 requires:
   system.name: Identifier for the system under test
-  system.category: System category, e.g. datacenter or edge
-  system.availability: Availability status, e.g. available or preview
-  submission.submitter: Organisation making the submission
-  submission.contact: Contact email for questions about this submission
-  submission.division: Submission division, e.g. standardized or open
-  submission.model.name: Name of the model being served
+  system.category: System category, datacenter or edge
+  system.availability: Availability status, e.g. available, preview or rdi
+  submission.division: Submission division, e.g. standardized, serviced or rdi
+  serving.url: The endpoint under test -- written to the submission as endpoint_url
 
 recommends:
   system.accelerator: Without it, accelerators are not probed at all
-  serving.url: Enables framework and version detection from the live endpoint
+  system.cooling: Reviewers ask how the nodes are cooled
   serving.node: Enables parallelism and batch settings to be read from the startup log
-  submission.model.precision: Reviewers ask for this almost every round
-  submission.dataset.name: Identifies what the system was serving
+  submission.notes.hardware: Becomes hw_notes on every node type
+  submission.notes.software: Becomes sw_notes on every node type
+  run.link_config: Reviewers use it to reproduce the run

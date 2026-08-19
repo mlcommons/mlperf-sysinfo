@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Collection.
 
-mlc-scripts collects; this module composes. The automation scripts are called
-exactly as they are today and asked for their grouped intermediate; every
-decision about what the final file contains is made here, driven by the
-profile.
+mlc-scripts collects, this module composes. The automation is asked for the
+field set the profile's benchmark declares, and what it returns is treated as
+the probed truth about the hardware. Which nodes to reach, what the config
+says about them, how much of a partial answer is acceptable, and what gets
+written where are all decided here.
 """
 
 from __future__ import annotations
@@ -93,18 +94,15 @@ class CaptureResult:
     @property
     def accelerator_total(self) -> int:
         """Best-effort count for the summary line."""
-        total = 0
+        from .output import accelerator_count  # local: avoids an import cycle
+
         try:
             data = json.loads(self.output_path.read_text())
         except (OSError, ValueError):
             return 0
-        for nt in data.get("node_types", []) or []:
-            per_node = nt.get("accelerators_per_node")
-            try:
-                total += int(nt.get("number_of_nodes", 1)) * int(per_node)
-            except (TypeError, ValueError):
-                continue
-        return total
+        # A flat capture has no node_types -- its hardware is the top level, so
+        # the whole document is the one "node type" to count.
+        return accelerator_count(data.get("node_types") or [data])
 
 
 def _require_mlc():
@@ -151,14 +149,25 @@ def build_mlc_kwargs(
 ) -> dict[str, Any]:
     """Translate the config into one automation-script invocation.
 
-    No benchmark variation is passed on purpose: we always want the grouped
-    intermediate and do the shaping ourselves.
+    The profile's ``benchmark`` variation selects which field set the
+    automation assembles. It has to be sent: since mlc-scripts 1.2.0a2 the
+    script no longer returns one shared intermediate that a caller can reshape
+    -- ``_endpoints`` keeps only the fields in endpoints rules 8.2, and
+    ``_inference`` keeps the ones the Inference submission checker wants.
+    Sending nothing silently gets the endpoints field set, which is how a
+    ``profile: inference`` capture ended up with no accelerator at all.
+
+    What each field *says* is still decided here, from the config: the
+    automation's own defaults are placeholder strings ("Insert ... here"), and
+    those must never reach a deliverable.
     """
     tags = ["get-mlperf-multi-node-system-info"]
     if config.system.accelerator != "none":
         tags.append(f"_{config.system.accelerator}")
     if not config.nodes.include_local:
         tags.append("_exclude_current_node")
+    if profile.benchmark:
+        tags.append(f"_{profile.benchmark}")
 
     use_redfish = profile.collect.redfish and config.power.redfish is not None
     if use_redfish:
@@ -176,6 +185,10 @@ def build_mlc_kwargs(
         "quiet": True,
     }
 
+    # The profiles that write endpoint_url are the ones that probe it, so one
+    # flag covers both. A value that is prose rather than a URL is still sent:
+    # it is the submission's answer, and the automation's probe gives up on it
+    # quietly.
     if profile.collect.endpoint_probe and config.serving.url:
         kwargs["endpoint_url"] = config.serving.url
     if profile.collect.serving_log and config.serving.node:
@@ -184,6 +197,17 @@ def build_mlc_kwargs(
         kwargs["serving_framework_type"] = config.serving.framework
     if node_config_file:
         kwargs["node_config_file"] = node_config_file
+
+    # Sent rather than overlaid afterwards: config_summary is a concatenation
+    # of the parallelism degrees and these notes, and the automation is what
+    # derives it. Overlaying the notes here would leave config_summary
+    # disagreeing with its own config_summary_notes.
+    if config.run.node_config:
+        kwargs["node_config"] = config.run.node_config
+    if config.run.config_summary_notes:
+        kwargs["config_summary_notes"] = config.run.config_summary_notes
+    if config.run.link_config:
+        kwargs["link_config"] = config.run.link_config
     if run_metadata_path is not None:
         kwargs["run_metadata_path"] = str(Path(run_metadata_path).resolve())
     if use_redfish:
@@ -374,8 +398,19 @@ def capture(
 
 
 def count_collected_nodes(collected: dict) -> int:
-    """How many machines actually reported hardware."""
-    node_types = collected.get("node_types") or []
+    """How many machines actually reported hardware.
+
+    The endpoints field set groups nodes under ``node_types``; the flat
+    inference one has already summed them into ``number_of_nodes``. Reading
+    only the grouped form would score every flat capture as zero nodes and
+    abort it as having collected nothing.
+    """
+    node_types = collected.get("node_types")
+    if node_types is None:
+        try:
+            return int(collected.get("number_of_nodes", 0))
+        except (TypeError, ValueError):
+            return 0
     total = 0
     for entry in node_types:
         try:

@@ -9,6 +9,7 @@ description: >-
 
 output_file: system_desc.json
 shape: flat
+benchmark: inference
 
 collect:
   serving_log: false

@@ -70,17 +70,17 @@ NODES
   ✓ this machine   included
 
 REQUIRED BY PROFILE 'ENDPOINTS'
-  ✓ 7 fields set
+  ✓ 5 fields set
 
   Ready to capture.
 ```
 
 ### A config that is not
 
-This is the starter config with placeholders left in. Note that `system.cooling`
-and `submission.container_link` are not fields the profile requires — every
-string is scanned, because a placeholder in *any* field still reaches the
-submission file.
+This is the starter config with placeholders left in. Note that
+`submission.container_link` is not a field the profile requires — every string
+is scanned, because a placeholder in *any* field still reaches the submission
+file.
 
 ```console
 $ mlperf-sysinfo check -c ph.yaml
@@ -92,27 +92,27 @@ NODES
   ✓ this machine   included
 
 REQUIRED BY PROFILE 'ENDPOINTS'
-  ✓ 7 fields set
+  ✓ 4 fields set
+  ✗ system.name                  placeholder   still the starter value -- Identifier for the system under test
 
 STILL STARTER TEXT
   ✗ system.cooling               placeholder   'CHANGEME'
-  ✗ system.type_detail           placeholder   'Insert system type detail here'
-  ✗ submission.model.notes       placeholder   'Insert your organization name here'
   ✗ submission.notes.hardware    placeholder   'Insert your hardware notes here'
   ✗ submission.container_link    placeholder   '<your registry url>'
 
 WORTH FILLING IN
-  ! serving.url                  empty         Enables framework and version detection from the live endpoint
   ! serving.node                 empty         Enables parallelism and batch settings to be read from the startup log
-  ! submission.model.precision   empty         Reviewers ask for this almost every round
-  ! submission.dataset.name      empty         Identifies what the system was serving
+  ! submission.notes.software    empty         Becomes sw_notes on every node type
+  ! run.link_config              empty         Reviewers use it to reproduce the run
 
-  5 problems.
+  4 problems.
   Fill in the missing fields and run check again.
 ```
 
-Exit code `1`. Anything under **worth filling in** is a warning and does not
-block.
+Exit code `1`. **Worth filling in** lists fields that are *empty* and only
+warns. Starter text is never a warning, wherever it turns up: `system.cooling`
+is only a recommendation, but `CHANGEME` in it would still be written to the
+file looking like an answer.
 
 ### An unreachable node
 
@@ -208,7 +208,7 @@ asserted.
 $ mlperf-sysinfo show results/h100_run1/system_desc.json
 
   system       H100x8
-  profile      inference (v6.0 rules)
+  profile      endpoints (v6.0 rules)
   captured     2026-08-10T14:08:36+00:00
   size         8x NVIDIA H100 80GB HBM3
 
@@ -222,12 +222,15 @@ DETECTED
   software       CUDA 12.9, Driver 575.57.08
 
 FROM YOUR CONFIG
-  submitter      MyOrg
-  contact        mlperf@myorg.example
-  division       closed
-  system type    datacenter
-  status         available
+  division       standardized
+  category       datacenter
+  availability   available
+  endpoint       http://node1:8000
+  run config     TP 8
 ```
+
+For a flat (`inference`) capture the same block shows `submitter`, `contact`,
+`division`, `system type` and `status`.
 
 A partial file is called out with a `state` line.
 
@@ -260,7 +263,7 @@ $ mlperf-sysinfo validate broken.json
 
 PROBLEMS
   ✗ partial capture: 1 of 2 nodes answered. This file does not describe the whole system.
-  ✗ submitter_org_names still holds placeholder text: 'CHANGEME'
+  ✗ endpoint_url is empty -- The endpoint under test, written to the submission as endpoint_url
   ✗ node_types[0].cooling still holds placeholder text: 'CHANGEME'
 
   3 problem(s). This file is not ready to submit.
@@ -280,7 +283,7 @@ $ mlperf-sysinfo profiles
   endpoints    MLPerf Endpoints  round 6.0
     Inference-serving endpoints. Keeps the multi-node structure in the output so
     heterogeneous and disaggregated systems stay legible.
-    7 required field(s), writes nested system_desc.json
+    5 required field(s), writes nested system_desc.json
 
   inference    MLPerf Inference  round 6.0
     MLPerf Inference submissions. Writes the flat field set the submission checker

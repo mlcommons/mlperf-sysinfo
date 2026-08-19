@@ -26,12 +26,22 @@ nothing.
 **The one idea: `mlc-scripts` collects, this package composes.** Probing a
 machine (SSH, CPU/memory/accelerator detection, Redfish, serving-log parsing)
 is shared, unchanged automation, pinned to an exact pre-release
-(`mlc-scripts==1.2.0a1`) that this package is tested against. Every decision
-about what a working group must supply and what its output file looks like is
-policy, and lives here instead. No benchmark variation is ever passed to the
-automation — it always returns the same grouped intermediate, and a profile
-decides how to shape it. Adding a working group should mean writing one YAML
-profile, not touching the collection code.
+(`mlc-scripts==1.2.0a2`) that this package is tested against. Every decision
+about what a working group must supply is policy, and lives here instead.
+
+The automation assembles a *different field set per benchmark*, so the
+profile's `benchmark` names which one to ask for — `_endpoints` keeps only the
+fields in endpoints rules 8.2, `_inference` keeps what the Inference
+submission checker wants, and the two are not interchangeable. Sending no
+variation silently gets the endpoints field set, which is how a `profile:
+inference` capture once shipped with no accelerator in it. What comes back is
+the probed truth about the hardware; `output.py` puts it in the published
+template's order and writes every config-supplied value over whatever the
+automation defaulted, because those defaults are placeholder strings
+(`"Insert system category here"`) that must never reach a deliverable.
+
+Adding a working group that can use an existing field set is still one YAML
+profile and no collection change.
 
 ### Module map
 
@@ -41,7 +51,7 @@ profile, not touching the collection code.
 | `profiles/` | What each working group requires, collects, and writes — YAML files, no Python |
 | `preflight.py` | Validation and reachability; the engine behind the `check` command |
 | `collector.py` | Invokes the automation, verifies what actually came back, orchestrates a `capture` |
-| `output.py` | Shapes the collected intermediate into the profile's output shape; stamps provenance |
+| `output.py` | Orders the collected field set, overlays config metadata, stamps provenance |
 | `report.py` | Reads a captured file back on its own — `show` and `validate` |
 | `cli.py` / `ui.py` | The `mlperf-sysinfo` command line (cyclopts) and its terminal rendering |
 | `errors.py` | Every deliberate failure is one of `SysinfoError`'s subclasses |
@@ -49,8 +59,17 @@ profile, not touching the collection code.
 ### Config and profiles
 
 - `SysinfoConfig` (`config.py`) is the whole config file: `system`, `nodes`,
-  `serving`, `power`, `submission`, plus `extends` for shared defaults and
-  `${VAR}` for secrets that must never be written to disk.
+  `serving`, `power`, `submission`, `run`, plus `extends` for shared defaults
+  and `${VAR}` for secrets that must never be written to disk. A section or list
+  whose entries are all commented out parses as `None`; `config.drop_empty_sections`
+  turns it into an empty container, driven by the schema so that an unset
+  *scalar* (`cooling:`) and an optional model (`power.redfish:`) stay `None` —
+  those mean "unset" and "not configured", not "empty".
+- Model, dataset and concurrency details are **not** config fields. For
+  Endpoints they are measurement point metadata (rules 8.3,
+  `points/<point>/config.yml`), which this tool does not write.
+  `config.MIGRATED_PATHS` maps the removed options to a message saying where
+  they went, so an old config gets that instead of "unknown option".
 - `SysinfoConfig.all_targets` is `nodes.ssh` plus `serving.node` (deduplicated)
   if it names a machine not already in that list — a node only mentioned as
   where the server runs is still part of the system and gets reached during
@@ -61,7 +80,8 @@ profile, not touching the collection code.
   (absence is a warning), `collect` flags (which optional steps run), and
   `shape` (`nested` keeps `node_types` for heterogeneous/disaggregated
   systems; `flat` lifts hardware to the top level for the MLPerf Inference
-  submission checker). Profiles always track the *current* MLPerf round —
+  submission checker), and `benchmark` (which field set to collect). Profiles
+  always track the *current* MLPerf round —
   there is no pinning, so a profile change applies to everyone on the next
   release, which is why profile changes get careful review.
 
@@ -71,7 +91,7 @@ This distinction is the core of `check`/`capture`'s design:
 
 | Kind | Examples | Behaviour |
 | --- | --- | --- |
-| Config problem | Missing required field, `CHANGEME` left in, unset `${VAR}`, node-group counts exceeding configured nodes | Hard stop, no override |
+| Config problem | Missing required field, `CHANGEME` left in *anywhere* — required, recommended or unmentioned — unset `${VAR}`, node-group counts exceeding configured nodes | Hard stop, no override |
 | Reachability problem | A node that won't answer, fewer nodes returning hardware than asked for | Stops the run, but `--allow-partial` proceeds and marks the output partial |
 
 `capture` always runs the check first (no flag skips it). Node counts are
@@ -84,8 +104,8 @@ error, even with `--allow-partial`; no file gets written in that case.
 ### Output layout
 
 Only the deliverable (`system_desc.json` by default) is written to
-`output.dir`. Everything the automation itself produces — the raw grouped
-intermediate, per-node files, its own log — goes into
+`output.dir`. Everything the automation itself produces — the field set it
+returned, per-node files, its own log — goes into
 `output.dir/.mlperf-sysinfo/` (`--verbose` prints that log to the terminal
 instead). Redfish captures are deliverables in their own right and get lifted
 back out into `output.dir`.

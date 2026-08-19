@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .config import find_placeholders
 from .errors import ConfigError
-from .output import output_key_for
+from .output import NODE_SCOPE, accelerator_count, output_key_for
 from .profiles import Profile
 from .profiles import load as load_profile
 
@@ -80,9 +80,8 @@ def validate(path: str | Path, *, profile_name: str | None = None) -> Validation
         if key is None:
             continue
         report.checked += 1
-        value = data.get(key)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            report.problems.append(f"{key} is empty -- {why}")
+        if _is_empty(data, key):
+            report.problems.append(f"{_label(key)} is empty -- {why}")
 
     # The whole document, not just the top level: for the nested shape, the
     # per-node metadata copied out of the config lives inside node_types.
@@ -105,11 +104,88 @@ def validate(path: str | Path, *, profile_name: str | None = None) -> Validation
         key = output_key_for(config_path, profile.shape)
         if key is None:
             continue
-        value = data.get(key)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            report.warnings.append(f"{key} is empty -- {why}")
+        if _is_empty(data, key):
+            report.warnings.append(f"{_label(key)} is empty -- {why}")
+
+    for where in _detection_failures(data):
+        report.warnings.append(f"{where} was not detected -- fill it in before submitting")
 
     return report
+
+
+def _blank(value) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _label(key: str) -> str:
+    """How a mapped key is named in a report.
+
+    A node-scoped field is named with that scope: a submitter told "cooling is
+    empty" would grep the top level of the file for it and find nothing.
+    """
+    if not key.startswith(NODE_SCOPE):
+        return key
+    return f"{key.removeprefix(NODE_SCOPE)} on every node type"
+
+
+def _is_empty(data: dict, key: str) -> bool:
+    """Whether a mapped output key has no answer.
+
+    A node-scoped key counts as empty only when *every* node type leaves it
+    blank: one node type legitimately differing from another is not a problem
+    with the file.
+    """
+    if not key.startswith(NODE_SCOPE):
+        return _blank(data.get(key))
+    field = key.removeprefix(NODE_SCOPE)
+    node_types = data.get("node_types") or []
+    if not node_types:
+        return True
+    return all(_blank(node.get(field)) for node in node_types)
+
+
+def _detection_failures(data: dict) -> list[str]:
+    """Fields a probe explicitly could not answer.
+
+    "N/A" and "Not detected: ..." are the collection script's way of saying it
+    looked and found nothing, which is worth telling a submitter about --
+    blanking them here would hide it, and a reviewer reading the file cannot
+    tell the difference between "not detected" and "not applicable".
+    """
+    def undetected(value) -> bool:
+        return isinstance(value, str) and (
+            value.strip() in ("N/A", "Not available")
+            or value.lower().startswith("not detected")
+        )
+
+    found: list[str] = []
+    node_types = data.get("node_types")
+    if not node_types:
+        # A flat capture has no node_types -- its hardware is the top level.
+        # The collection script blanks "N/A" there but not "Not detected: ...",
+        # so those reach the file and would otherwise go unmentioned.
+        return [
+            name
+            for name, value in data.items()
+            if name != "mlperf_sysinfo" and undetected(value)
+        ]
+    for index, node in enumerate(node_types):
+        if not isinstance(node, dict):
+            continue
+        for name, value in node.items():
+            if undetected(value):
+                found.append(f"node_types[{index}].{name}")
+        # The accelerators are a level down, and interconnect detection is one
+        # of the likeliest things to come back empty on a consumer card.
+        for accel_index, accelerator in enumerate(node.get("accelerator_info") or []):
+            if not isinstance(accelerator, dict):
+                continue
+            for name, value in accelerator.items():
+                if undetected(value):
+                    found.append(
+                        f"node_types[{index}].accelerator_info[{accel_index}].{name}"
+                    )
+    return found
 
 
 @dataclass
@@ -132,15 +208,15 @@ class Summary:
     supplied: list[tuple[str, str]] = field(default_factory=list)
 
 
+#: Model, dataset and submitter details are measurement point metadata now
+#: (endpoints rules 8.3) and are not in this file to show.
 _SUPPLIED_NESTED = [
-    ("submitter", "submitter_org_names"),
-    ("contact", "submitter_contact"),
     ("division", "division"),
     ("category", "system_category"),
     ("availability", "system_availability_status"),
-    ("model", "model_name"),
-    ("precision", "model_precision"),
-    ("dataset", "dataset_name"),
+    ("endpoint", "endpoint_url"),
+    ("node config", "node_config"),
+    ("config link", "link_config"),
 ]
 
 _SUPPLIED_FLAT = [
@@ -161,6 +237,25 @@ _DETECTED_FIELDS = [
     ("software", "other_software_stack"),
 ]
 
+#: 8.2.1 nests a node type's accelerators, and a node type can hold more than
+#: one model. Flat accelerator_* keys still appear at the top level of a flat
+#: capture, and in a file written before the nesting landed.
+_ACCELERATOR_FIELDS = ("accelerator_model_name", "accelerators_per_node")
+
+
+def _accelerator_view(entry: dict) -> dict:
+    """One dict to read accelerator_* out of, nested or flat."""
+    nested = entry.get("accelerator_info")
+    if isinstance(nested, list) and nested and isinstance(nested[0], dict):
+        merged = dict(entry)
+        for field in _ACCELERATOR_FIELDS:
+            values = [
+                str(a.get(field, "")) for a in nested if isinstance(a, dict) and a.get(field)
+            ]
+            merged[field] = " + ".join(dict.fromkeys(values))
+        return merged
+    return entry
+
 
 def summarise(path: str | Path) -> Summary:
     path = Path(path)
@@ -169,19 +264,20 @@ def summarise(path: str | Path) -> Summary:
     shape_name = stamp.get("shape") or ("nested" if "node_types" in data else "flat")
 
     node_types = data.get("node_types") or []
-    accel_total = 0
+    accel_total = accelerator_count(node_types or [data])
     nodes: list[tuple[str, int, str]] = []
     for nt in node_types:
-        count = nt.get("number_of_nodes", 1)
-        accel = nt.get("accelerator_model_name") or "no accelerator detected"
-        per_node = nt.get("accelerators_per_node")
-        try:
-            accel_total += int(count) * int(per_node)
-        except (TypeError, ValueError):
-            pass
-        nodes.append((accel, count, str(nt.get("host_processor_model_name") or "")))
+        view = _accelerator_view(nt)
+        accel = view.get("accelerator_model_name") or "no accelerator detected"
+        nodes.append(
+            (
+                accel,
+                nt.get("number_of_nodes", 1),
+                str(nt.get("host_processor_model_name") or ""),
+            )
+        )
 
-    first = node_types[0] if node_types else data
+    first = _accelerator_view(node_types[0]) if node_types else data
     detected = [
         (label, str(first.get(key)))
         for label, key in _DETECTED_FIELDS

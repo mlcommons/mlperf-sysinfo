@@ -13,19 +13,27 @@ so it belongs in a package groups can configure.
 flowchart LR
     A["<b>mlperf-sysinfo</b><br/>composition"] -->|one call| B["<b>mlc-scripts</b><br/>collection"]
     B --> C["SSH to each node<br/>CPU / memory / accelerators<br/>network / OS<br/>Redfish, serving log"]
-    C -->|grouped intermediate| A
-    A --> D["system_desc.json<br/>shaped by profile"]
+    C -->|probed field set| A
+    A --> D["system_desc.json<br/>metadata and order<br/>from the profile"]
 ```
 
-Before this package existed, the shaping lived at the end of a single shared
-automation script and was selected by a tag. Every new working group meant
-another branch in code everyone else depended on. Now the automation always
-returns the same grouped intermediate, and the profile decides the rest.
+The split runs along one line: **the automation owns what the hardware is, this
+package owns everything a person had to type.** The profile's `benchmark` names
+which field set to gather — the Endpoints and Inference field sets are not the
+same shape and are not interchangeable — and what comes back is treated as the
+probed truth. What each submitter-supplied field *says* is decided here.
 
-!!! note "The automation is called unmodified"
-    No benchmark variation is passed on purpose, so the automation returns its
-    grouped intermediate rather than pre-shaping anything. `mlc-scripts` needs
-    no changes to support a new working group.
+!!! warning "Why the metadata is not left to the automation"
+    The automation's defaults for submitter-supplied fields are placeholder
+    strings: `"Insert system category here"`. A placeholder in a submission
+    file is worse than an empty one, because it reads as filled in. So every
+    such field is written from the config or left genuinely empty, and
+    `check` is what refuses to run when one that matters is empty.
+
+!!! note "A profile still costs no automation change"
+    Requirements, recommendations, field order, which optional probes run and
+    what the file is called are all profile data. A new group that can use an
+    existing field set is one YAML file.
 
 ## Module map
 
@@ -35,12 +43,12 @@ returns the same grouped intermediate, and the profile decides the rest.
 | `profiles/` | What each working group requires, collects, and writes. YAML, no Python |
 | `preflight.py` | Validation and reachability — the `check` command's engine |
 | `collector.py` | Invokes the automation, verifies what came back, orchestrates the run |
-| `output.py` | Shapes the intermediate into the profile's output; stamps provenance |
+| `output.py` | Orders the collected field set, overlays config metadata, stamps provenance |
 | `report.py` | Reads a captured file back — `show` and `validate` |
 | `cli.py` / `ui.py` | The command line and its rendering |
 | `errors.py` | Every deliberate failure is one of these |
 
-The `mlc-scripts` dependency is pinned to an exact pre-release, `1.2.0a1`, which
+The `mlc-scripts` dependency is pinned to an exact pre-release, `1.2.0a2`, which
 is the version this package is tested against. `pip` installs it without any
 flag because the specifier names the pre-release explicitly; `uv` needs
 `prerelease = "allow"`, which `pyproject.toml` already sets.
@@ -57,7 +65,7 @@ flowchart TD
     F -->|no| E
     F -->|yes| G
     D -->|all good| G[call mlc-scripts]
-    G --> H[read grouped intermediate]
+    G --> H[read the collected field set]
     H --> I{how many nodes<br/>came back?}
     I -->|zero| J[error, nothing written]
     I -->|fewer than asked| F
@@ -99,7 +107,7 @@ automation produces goes into a scratch directory beside it:
 results/my_run/
 ├── system_desc.json            ← the deliverable
 └── .mlperf-sysinfo/
-    ├── raw-system-info.json    ← grouped intermediate from mlc-scripts
+    ├── raw-system-info.json    ← the field set mlc-scripts returned
     ├── automation.log          ← the automation's own output
     └── mlperf-system-info-single-node-0.json
 ```

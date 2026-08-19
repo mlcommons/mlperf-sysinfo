@@ -4,8 +4,12 @@
 #   mlperf-sysinfo capture -c sysinfo.yaml     # collect and write the file
 #
 # Anything the tool can detect for itself -- CPU, memory, accelerators, node
-# counts, framework version -- is deliberately absent below. Only what cannot
-# be detected belongs in this file.
+# counts, framework version, parallelism and batch size -- is deliberately
+# absent below. Only what cannot be detected belongs in this file.
+#
+# Model, dataset and concurrency details are NOT here any more. They are
+# measurement point metadata (endpoints rules 8.3) and belong in each point's
+# points/<point>/config.yml, which this tool does not write.
 
 profile: endpoints
 
@@ -17,7 +21,7 @@ system:
   category: datacenter           # datacenter | edge
   availability: available        # available | preview | rdi
   accelerator: cuda              # cuda | rocm | xpu | none
-  cooling: air
+  cooling: air                   # air | liquid | passive
 
 nodes:
   include_local: false           # is this machine part of the system under test?
@@ -36,10 +40,29 @@ nodes:
   #     - { match: NVIDIA H100, count: 5 }
 
 serving:
-  url: http://node1:8000         # probed for framework name and version
+  # The endpoint under test, and also probed for the framework name/version.
+  # Rules 8.2 allow a description instead of a URL, for a hosted endpoint with
+  # no public address -- e.g. "Managed endpoint, us-east-1, no public URL".
+  url: http://node1:8000
   node: user@node1               # where the server process runs
   log: /tmp/serving.log          # server stdout/stderr must be redirected here
   framework: auto                # auto | vllm | sglang | trtllm
+
+submission:
+  division: standardized         # standardized | serviced | rdi
+  # container_link: https://...  # container the submission ran in
+  notes:
+    hardware: ""                 # becomes hw_notes on every node type
+    software: ""                 # becomes sw_notes on every node type
+    # other_hardware: ""
+
+# How the stack was configured for this run. The parallelism degrees and batch
+# size are read from serving.log, so they are not listed here -- these three
+# cannot be detected from anything on the machine.
+run:
+  # node_config: "prefill: 2x H100; decode: 6x H100"   # defaults to a summary of nodes.groups
+  # config_summary_notes: ""     # anything the parallelism fields do not capture
+  # link_config: https://github.com/myorg/submission/tree/main/configs
 
 # Optional BMC power capture. Credentials are read from the environment --
 # never write them into this file.
@@ -48,18 +71,3 @@ serving:
 #     endpoint: https://bmc.node1
 #     username: ${BMC_USER}
 #     password: ${BMC_PASSWORD}
-
-submission:
-  submitter: CHANGEME
-  contact: CHANGEME@example.com
-  division: standardized         # standardized | open
-  model:
-    name: CHANGEME               # e.g. Llama-3.1-8B-Instruct
-    precision: fp8
-    # link: https://huggingface.co/...
-  dataset:
-    name: CHANGEME               # e.g. cnn_dailymail
-    type: text
-  notes:
-    hardware: ""
-    software: ""

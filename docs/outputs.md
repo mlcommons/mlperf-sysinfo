@@ -47,7 +47,7 @@ The collection layer can run either from a git checkout or from the installed
 package, so the stamp takes whichever form applies:
 
 ```json
-"mlc_scripts": { "package_version": "1.2.0a1" }
+"mlc_scripts": { "package_version": "1.2.0a2" }
 ```
 
 That is what a `pip install` produces — `mlc-scripts` runs from the installed
@@ -61,73 +61,103 @@ mixed-version run stays visible rather than hidden.
 
 ## `endpoints` — grouped
 
-Keeps `node_types`, so multi-node and disaggregated systems stay legible. One
-entry per node type, each with its own hardware and a `number_of_nodes` count.
+The field set defined by [endpoints rules
+8.2](https://github.com/mlcommons/endpoints_policies/blob/main/endpoints_rules.md),
+in the order of the 8.2.1 template. `node_types` keeps multi-node and
+disaggregated systems legible — one entry per node type, each with its own
+hardware and a `number_of_nodes` count — and `accelerator_info` nests the
+accelerators inside it, so a node type holding more than one accelerator model
+can say so.
 
 ```json
 {
-  "submitter_org_names": "MyOrg",
-  "submitter_contact": "mlperf@myorg.example",
-  "submission_id": "",
-  "submission_date": "",
-  "publish_date": "",
+  "division": "standardized",
   "system_name": "H100x8",
-  "system_category": "datacenter",
   "system_availability_status": "available",
-  "system_size": "8x NVIDIA H100 80GB HBM3",
+  "system_category": "datacenter",
+  "system_size": "8 accelerators",
   "system_node_ensemble_count": 1,
   "system_node_ensemble_total": 1,
-  "serving_framework": "",
+  "endpoint_url": "http://node1:8000",
+  "serving_framework": "vLLM 0.9.0",
   "node_types": [
     {
-      "system_node_ensemble_id": 0,
+      "system_node_ensemble_id": 1,
       "number_of_nodes": 1,
       "host_processor_model_name": "Intel(R) Xeon(R) Platinum 8480+",
       "host_processors_per_node": 2,
       "host_processor_core_count": 112,
       "host_processor_vcpu_count": 224,
-      "host_processor_frequency": "3.80 GHz",
-      "host_processor_caches": "L1d: 5.3 MiB (112 instances); L1i: 3.5 MiB (112 instances); L2: 224 MiB (112 instances); L3: 210 MiB (2 instances)",
-      "host_processor_interconnect": "UPI (2 NUMA nodes)",
       "host_memory_capacity": "2.2T",
-      "accelerator_model_name": "NVIDIA H100 80GB HBM3",
-      "accelerators_per_node": 8,
-      "accelerator_memory_capacity": "80GiB",
-      "accelerator_memory_type": "HBM3",
-      "accelerator_interconnect": "NVLink",
-      "accelerator_host_interconnect": "PCIe Gen5 x16",
-      "accelerator_frequency": "1980.000000 MHz",
-      "accelerator_interconnect_topology": "Mesh",
+      "host_memory_configuration": "32x 64GB DDR5-4800",
+      "accelerator_info": [
+        {
+          "accelerator_model_name": "NVIDIA H100 80GB HBM3",
+          "accelerators_per_node": 8,
+          "accelerator_memory_capacity": "80GiB",
+          "accelerator_memory_type": "HBM3",
+          "accelerator_interconnect": "NVLink",
+          "accelerator_host_interconnect": "PCIe Gen5 x16"
+        }
+      ],
       "host_network_card_count": "3x mlx5_0: native InfiniBand",
       "host_networking": "mlx5_0: native InfiniBand",
       "host_storage_capacity": "1.1 GB NVMe SSD, 1.8 TB SSD",
       "host_storage_type": "NVMe SSD",
-      "operating_system": "ubuntu 24.04",
-      "other_software_stack": "CUDA 12.9, Driver 575.57.08",
-      "filesystem": "ext4 vfat zfs",
+      "other_hardware": "",
+      "cooling": "air",
       "hw_notes": "hw note",
-      "cooling": "air"
+      "inference_backend": "CUDA 12.9",
+      "driver": "Driver 575.57.08",
+      "operating_system": "ubuntu 24.04",
+      "filesystem": "ext4 vfat zfs",
+      "container_link": "",
+      "other_software_stack": "CUDA 12.9, Driver 575.57.08",
+      "sw_notes": "sw note"
     }
   ],
-  "division": "standardized",
-  "model_name": "Llama-3.1-8B-Instruct",
-  "model_precision": "fp8",
-  "dataset_name": "cnn_dailymail",
-  "dataset_type": "text",
-  "hw_notes": "hw note",
-  "sw_notes": "sw note",
-  "cooling": "air",
-  "system_type_detail": "rack detail here-ish",
+  "node_config": "prefill: 2x H100; decode: 6x H100",
+  "disaggregated": 0,
+  "expert_parallel": 1,
+  "tensor_parallel": 8,
+  "pipeline_parallel": 1,
+  "data_parallel": 1,
+  "batch": 256,
+  "config_summary": "TP 8",
+  "config_summary_notes": "",
+  "link_config": "https://github.com/myorg/submission/tree/main/configs",
   "mlperf_sysinfo": { "...": "as above" }
 }
 ```
 
+Nothing outside that field set is written. Two groups of fields used to be
+here and are not any more:
+
+| Was in the file | Where it is now |
+| --- | --- |
+| `model_name`, `model_precision`, `link_to_model`, `link_to_model_transformation`, `model_notes`, `dataset_name`, `dataset_type`, `dataset_link`, `max_supported_concurrency` | Measurement point metadata (rules 8.3), in each point's `points/<point>/config.yml`. This tool does not write that file |
+| `submitter_org_names`, `submitter_contact`, `submission_id`, `submission_date`, `publish_date`, `measured_accuracy_score`, `system_type_detail`, `input_token_average`, `output_token_average` | Dropped from the field table |
+
+`hw_notes`, `sw_notes`, `other_hardware`, `cooling` and `container_link` are
+still written, but per node type rather than once at the top level — the same
+config value is copied onto every entry.
+
+!!! info "\"N/A\" is an answer, and it is left alone"
+    Where a probe looked and found nothing it writes `N/A` or
+    `Not detected: ...`, and that survives into the file — including in fields
+    the template types as a number. Blanking it would lose the distinction
+    between "not detected" and "not applicable", and writing `0` would hide a
+    failed detection behind a plausible answer. `validate` warns about every
+    one of them, so they are visible before you submit rather than after. The
+    consequence is that a capture with failed detections will not pass a strict
+    JSON-schema check of the template: fill those fields in first.
+
 !!! info "Empty strings, never placeholders"
-    `model_id`, `link_to_model`, `measured_accuracy_score` and friends are
-    omitted above for length; in the real file they are present and empty.
-    A field nobody supplied comes out as `""` — never as
-    `"Insert your organization name here"`, which is what the pre-package
-    pipeline used to write into submissions.
+    A field nobody supplied comes out as `""` (or `0` for a count) — never as
+    `"Insert your organization name here"`, which is what the underlying
+    automation defaults to and what the pre-package pipeline used to write
+    into submissions. Overwriting those defaults from the config is the
+    reason the shaping step exists.
 
 ---
 
@@ -185,12 +215,20 @@ hardware lifted to the top level and renamed to the checker's names.
 
 | Grouped (`endpoints`) | Flat (`inference`) |
 | --- | --- |
-| `submitter_org_names` | `submitter` |
 | `system_category` | `system_type` |
 | `system_availability_status` | `status` |
 | `serving_framework` | `framework` |
-| `node_types[]` with per-node hardware | Hardware lifted to the top level |
+| `node_types[]`, with `accelerator_info[]` inside | Hardware lifted to the top level |
 | `system_node_ensemble_total` | `number_of_nodes` |
+| — | `submitter`, `submitter_contact`, `system_type_detail` |
+| `endpoint_url` and the run configuration | — |
+
+They are also two different field sets on the collection side, not one file
+trimmed two ways: the profile's `benchmark` names which one to gather, because
+each keeps fields the other has no use for. The flat shape keeps
+`host_processor_frequency`, `accelerator_frequency` and the on-chip memory
+sizes that the checker asks for; the grouped shape keeps the run configuration
+and drops everything outside rules 8.2.
 
 When a flat capture covers several node types, values are merged: identical
 hardware collapses to one value, and genuinely different hardware is
@@ -200,10 +238,22 @@ comma-joined so nothing is silently dropped.
 
 ## `system_size`
 
-Computed per the MLPerf Per Submission Data Dictionary: for each node type,
-`number_of_nodes × accelerators_per_node` of the accelerator model, falling back
-to host processors when no accelerator was detected. Node types are joined with
-`+`.
+The two profiles define this field differently, so they compute it differently.
+
+**`endpoints`** follows rules 8.2: *"Number of accelerators per node type"*. Per
+node type, `number_of_nodes × accelerators_per_node` summed over every
+accelerator model it hosts, joined with `+`. The field counts accelerators and
+nothing else — a node type with none reports `0`, rather than falling back to
+host processors and answering a different question.
+
+```text
+8 accelerators
+72 accelerators + 144 accelerators
+0 accelerators
+```
+
+**`inference`** follows the MLPerf Per Submission Data Dictionary, which names
+the model as well and does fall back to host processors:
 
 ```text
 8x NVIDIA H100 80GB HBM3
@@ -211,7 +261,7 @@ to host processors when no accelerator was detected. Node types are joined with
 4x Intel(R) Xeon(R) Platinum 8480+
 ```
 
-Set `system.size` in the config to override it. That is rarely needed.
+Set `system.size` in the config to override either. That is rarely needed.
 
 ---
 

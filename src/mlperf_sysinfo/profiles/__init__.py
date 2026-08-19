@@ -30,7 +30,12 @@ class CollectFlags(BaseModel):
         default=False, description="SSH to serving.node and parse the startup log."
     )
     endpoint_probe: bool = Field(
-        default=False, description="HTTP-probe serving.url for framework and version."
+        default=False,
+        description=(
+            "HTTP-probe serving.url for framework and version, and write it to "
+            "the output as endpoint_url. A profile that requires serving.url "
+            "needs this on, or the field it requires is never written."
+        ),
     )
     redfish: bool = Field(
         default=False, description="Allow BMC capture when power.redfish is configured."
@@ -48,6 +53,13 @@ class Profile(BaseModel):
     description: str = ""
     output_file: str = "system_desc.json"
     shape: Literal["nested", "flat"] = "nested"
+    benchmark: str = Field(
+        default="",
+        description=(
+            "Which output shape to ask the automation for, as its "
+            "'mlperf-benchmark' variation. Empty means send no variation."
+        ),
+    )
     collect: CollectFlags = Field(default_factory=CollectFlags)
     requires: dict[str, str] = Field(
         default_factory=dict,

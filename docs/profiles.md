@@ -13,7 +13,7 @@ group is one YAML file — no Python, and no changes to shared collection code.
 
 | Profile | Requires | Also collects | Writes |
 | --- | --- | --- | --- |
-| `endpoints` | System name, category, availability, submitter, contact, division, model name | Serving config from the server's startup log; framework version from the live endpoint | Grouped, with `node_types` |
+| `endpoints` | System name, category, availability, division, endpoint URL | Serving config from the server's startup log; framework version from the live endpoint | Grouped, with `node_types` |
 | `inference` | System name, category, availability, submitter, contact, division | — | Flat, matching the submission checker |
 
 Both allow Redfish power capture when `power.redfish` is configured.
@@ -22,11 +22,17 @@ Both allow Redfish power capture when `power.redfish` is configured.
 $ mlperf-sysinfo profiles
 
   endpoints    MLPerf Endpoints  round 6.0
-    7 required field(s), writes nested system_desc.json
+    5 required field(s), writes nested system_desc.json
 
   inference    MLPerf Inference  round 6.0
     6 required field(s), writes flat system_desc.json
 ```
+
+!!! note "`endpoints` no longer asks for the model or the submitter"
+    Model, dataset and concurrency details are measurement point metadata
+    (endpoints rules 8.3) and belong in `points/<point>/config.yml`, which
+    this tool does not write. Submitter and contact left the Endpoints field
+    table altogether. `inference` is unaffected — it still needs both.
 
 ## Where profiles live
 
@@ -73,15 +79,16 @@ description: >-
 
 output_file: system_desc.json
 shape: nested            # nested | flat
+benchmark: endpoints     # which field set to ask the automation to gather
 
 collect:
   serving_log: false     # SSH to serving.node and parse the startup log
   endpoint_probe: false  # HTTP-probe serving.url for framework and version
   redfish: true          # allow BMC capture when power.redfish is configured
 
-requires:                # absence stops a run
+requires:                # absence, or leftover starter text, stops a run
   system.name: Identifier for the system under test
-  submission.submitter: Organisation making the submission
+  submission.division: Submission division
 
 recommends:              # absence is a warning
   system.accelerator: Without it, accelerators are not probed at all
@@ -97,10 +104,11 @@ extra_field_groups: []   # power | network -- adds the checker's extra blank fie
 | `title`, `description` | Shown by `mlperf-sysinfo profiles` |
 | `round` | The MLPerf round these requirements describe. Stamped into output |
 | `shape` | `nested` keeps `node_types`; `flat` lifts hardware to the top level |
+| `benchmark` | Which field set the automation gathers, as its `mlperf-benchmark` variation. Must be set: the field sets are not interchangeable, and asking for the wrong one loses fields silently |
 | `output_file` | Default filename, overridable by `output.file` |
-| `collect.*` | Which optional collection steps to run |
+| `collect.*` | Which optional collection steps to run. `endpoint_probe` also decides whether `endpoint_url` is written, so a nested profile that requires `serving.url` needs it on |
 | `requires` | Dotted config path → why it is needed. Shown verbatim when missing |
-| `recommends` | Same, but only warns |
+| `recommends` | Same, but an *empty* value only warns. Starter text still stops the run wherever it appears |
 | `extra_field_groups` | `power` and/or `network` blank field blocks, flat shape only |
 
 !!! tip "Write the `why` for a human"

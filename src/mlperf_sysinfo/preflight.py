@@ -4,8 +4,9 @@
 
 Two kinds of problem, deliberately handled differently:
 
-* config problems -- missing required fields, unresolved ``${VAR}``. Cheap to
-  fix and they produce bad submissions. No override.
+* config problems -- missing required fields, leftover starter text anywhere,
+  unresolved ``${VAR}``. Cheap to fix and they produce bad submissions. No
+  override.
 * reachability problems -- a node that will not answer. Also stops the run,
   but ``--allow-partial`` exists for when proceeding is a real decision.
 """
@@ -84,10 +85,22 @@ class CheckReport:
     network_checked: bool = True
 
     @property
+    def all_placeholders(self) -> list[tuple[str, str]]:
+        """Every field still holding starter text, whatever the profile says.
+
+        Required, recommended or never mentioned makes no difference: a
+        placeholder reaches the submission file either way, and reads as
+        filled in. Emptiness is what a recommendation is allowed to warn
+        about; leftover CHANGEME is not.
+        """
+        return (
+            self.placeholder_required + self.placeholder_recommended + self.placeholder_other
+        )
+
+    @property
     def config_problems(self) -> list[str]:
         out = [f"missing  {path}" for path, _ in self.missing_required]
-        out += [f"placeholder  {path}" for path, _ in self.placeholder_required]
-        out += [f"placeholder  {path}" for path, _ in self.placeholder_other]
+        out += [f"placeholder  {path}" for path, _ in self.all_placeholders]
         out += [f"unset environment variable at {ref}" for ref in self.unresolved_env]
         return out
 
@@ -97,12 +110,7 @@ class CheckReport:
 
     @property
     def has_config_problems(self) -> bool:
-        return bool(
-            self.missing_required
-            or self.placeholder_required
-            or self.placeholder_other
-            or self.unresolved_env
-        )
+        return bool(self.missing_required or self.all_placeholders or self.unresolved_env)
 
     @property
     def has_reach_problems(self) -> bool:
@@ -293,7 +301,7 @@ def run_check(
                 pool.map(lambda t: check_node(t, config.system.accelerator), targets)
             )
 
-    if profile.collect.endpoint_probe and config.serving.url:
+    if profile.collect.endpoint_probe and config.serving.is_probeable:
         report.endpoint = probe_endpoint(config.serving.url)
 
     if profile.collect.serving_log and config.serving.node:

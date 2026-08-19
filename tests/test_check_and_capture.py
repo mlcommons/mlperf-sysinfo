@@ -53,20 +53,38 @@ class TestCheck:
         self, tmp_path, endpoints_profile, all_reachable
     ):
         data = copy.deepcopy(GOOD_CONFIG)
-        del data["submission"]["contact"]
+        del data["submission"]["division"]
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         report = run_check(cfg, endpoints_profile)
         assert not report.ok
         assert report.has_config_problems
-        assert report.missing_required[0][0] == "submission.contact"
+        assert report.missing_required[0][0] == "submission.division"
 
     def test_placeholder_is_a_config_problem(self, tmp_path, endpoints_profile, all_reachable):
         data = copy.deepcopy(GOOD_CONFIG)
-        data["submission"]["submitter"] = "CHANGEME"
+        data["system"]["category"] = "CHANGEME"
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         report = run_check(cfg, endpoints_profile)
         assert report.has_config_problems
-        assert report.placeholder_required[0][0] == "submission.submitter"
+        assert report.placeholder_required[0][0] == "system.category"
+
+    def test_the_endpoint_is_required(self, tmp_path, endpoints_profile, all_reachable):
+        """endpoint_url is rules 8.2 metadata: an endpoints submission without
+        the endpoint it served is not submittable."""
+        data = copy.deepcopy(GOOD_CONFIG)
+        del data["serving"]["url"]
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert report.has_config_problems
+        assert any(p == "serving.url" for p, _ in report.missing_required)
+
+    @pytest.mark.parametrize(
+        "path", ["submission.model.name", "submission.dataset.name", "submission.submitter"]
+    )
+    def test_measurement_point_metadata_is_not_asked_for(self, endpoints_profile, path):
+        """Model, dataset and submitter details left the system description."""
+        assert path not in endpoints_profile.requires
+        assert path not in endpoints_profile.recommends
 
     def test_unresolved_env_var_is_a_config_problem(
         self, tmp_path, endpoints_profile, all_reachable, monkeypatch
@@ -112,11 +130,23 @@ class TestCheck:
 
     def test_recommended_fields_only_warn(self, tmp_path, endpoints_profile, all_reachable):
         data = copy.deepcopy(GOOD_CONFIG)
-        del data["submission"]["dataset"]
+        del data["system"]["cooling"]
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         report = run_check(cfg, endpoints_profile)
         assert report.ok
-        assert any(p == "submission.dataset.name" for p, _ in report.missing_recommended)
+        assert any(p == "system.cooling" for p, _ in report.missing_recommended)
+
+    def test_a_placeholder_in_a_recommended_field_still_blocks(
+        self, tmp_path, endpoints_profile, all_reachable
+    ):
+        """Empty is a warning; starter text is not. It would reach the file
+        looking like an answer."""
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["system"]["cooling"] = "CHANGEME"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert report.has_config_problems
+        assert any(p == "system.cooling" for p, _ in report.placeholder_recommended)
 
 
 class TestMlcInvocation:
@@ -126,12 +156,45 @@ class TestMlcInvocation:
         assert "_cuda" in kwargs["tags"]
         assert "_exclude_current_node" in kwargs["tags"]
 
-    def test_no_benchmark_variation_is_passed(self, good_config_file, endpoints_profile, tmp_path):
-        """Shaping is ours, so the automation must return its grouped intermediate."""
+    def test_the_profiles_benchmark_variation_is_passed(
+        self, good_config_file, endpoints_profile, tmp_path
+    ):
+        """The automation returns a different field set per benchmark, so the
+        profile has to name the one it wants. Sending nothing gets endpoints
+        fields under a flat profile, with no accelerator in them."""
         cfg = load_config(good_config_file)
         tags = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)["tags"]
+        assert "_endpoints" in tags
         assert "_inference" not in tags
+
+    def test_the_inference_profile_asks_for_the_flat_field_set(
+        self, good_config_file, tmp_path
+    ):
+        cfg = load_config(good_config_file)
+        tags = build_mlc_kwargs(cfg, profiles.load("inference"), tmp_path)["tags"]
+        assert "_inference" in tags
         assert "_endpoints" not in tags
+
+    def test_run_configuration_is_sent_so_config_summary_stays_consistent(
+        self, tmp_path
+    ):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["run"] = {
+            "node_config": "prefill: 2x H100",
+            "config_summary_notes": "chunked prefill on",
+            "link_config": "https://example.invalid/configs",
+        }
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        kwargs = build_mlc_kwargs(cfg, profiles.load("endpoints"), tmp_path)
+        assert kwargs["node_config"] == "prefill: 2x H100"
+        assert kwargs["config_summary_notes"] == "chunked prefill on"
+        assert kwargs["link_config"] == "https://example.invalid/configs"
+
+    def test_an_unset_run_field_is_not_sent_at_all(self, good_config_file, tmp_path):
+        cfg = load_config(good_config_file)
+        kwargs = build_mlc_kwargs(cfg, profiles.load("endpoints"), tmp_path)
+        assert "node_config" not in kwargs
+        assert "config_summary_notes" not in kwargs
 
     def test_ssh_ids_are_normalised_with_ports(self, good_config_file, endpoints_profile, tmp_path):
         cfg = load_config(good_config_file)
@@ -221,7 +284,7 @@ class TestCapture:
         self, tmp_path, endpoints_profile, all_reachable, fake_mlc
     ):
         data = copy.deepcopy(GOOD_CONFIG)
-        del data["submission"]["contact"]
+        del data["submission"]["division"]
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         with pytest.raises(CheckFailed):
             capture(cfg, endpoints_profile, allow_partial=True)
@@ -269,8 +332,9 @@ class TestCapture:
         assert "node_config_file" in fake_mlc.calls[0]
 
     def test_inference_profile_produces_the_flat_shape(
-        self, tmp_path, all_reachable, fake_mlc
+        self, tmp_path, all_reachable, monkeypatch, collected_flat
     ):
+        monkeypatch.setattr(capture_mod, "_require_mlc", lambda: _FakeMlc(collected_flat))
         data = copy.deepcopy(GOOD_CONFIG)
         data["profile"] = "inference"
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
@@ -278,6 +342,33 @@ class TestCapture:
         out = json.loads(result.output_path.read_text())
         assert "node_types" not in out
         assert out["submitter"] == "MyOrg"
+        assert out["accelerator_model_name"] == "NVIDIA H100 80GB HBM3"
+
+
+class TestEndpointDescription:
+    """endpoint_url may be prose, so nothing should try to reach it."""
+
+    def test_a_description_is_not_probed(self, tmp_path, endpoints_profile, monkeypatch):
+        monkeypatch.setattr(check_mod, "check_node", lambda t, a: NodeStatus(t, True, ""))
+        monkeypatch.setattr(check_mod, "check_serving_log", lambda t, p: ProbeStatus(p, True, ""))
+
+        def explode(url):
+            raise AssertionError(f"probed a description: {url!r}")
+
+        monkeypatch.setattr(check_mod, "probe_endpoint", explode)
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["serving"]["url"] = "Managed endpoint, no public URL"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert report.endpoint is None
+        assert report.ok
+
+    def test_a_description_still_reaches_the_submission(self, tmp_path, endpoints_profile):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["serving"]["url"] = "Managed endpoint, no public URL"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+        assert kwargs["endpoint_url"] == "Managed endpoint, no public URL"
 
 
 class TestSshTargetsInCheck:

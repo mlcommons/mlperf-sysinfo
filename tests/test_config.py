@@ -146,12 +146,18 @@ class TestLoad:
         with pytest.raises(ConfigError):
             load_config(p)
 
-    def test_url_without_scheme_is_rejected(self, tmp_path):
+    def test_a_prose_endpoint_description_is_accepted(self, tmp_path):
+        """Endpoints rules 8.2 define endpoint_url as "URL or description of
+        the endpoint under test". A Serviced submission against a hosted API
+        with no public URL has only prose to give."""
         data = copy.deepcopy(GOOD_CONFIG)
-        data["serving"]["url"] = "node1:8000"
-        p = write_yaml(tmp_path / "c.yaml", data)
-        with pytest.raises(ConfigError, match="http"):
-            load_config(p)
+        data["serving"]["url"] = "Managed endpoint, no public URL"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert cfg.serving.url == "Managed endpoint, no public URL"
+        assert not cfg.serving.is_probeable
+
+    def test_an_http_url_is_probeable(self, good_config_file):
+        assert load_config(good_config_file).serving.is_probeable
 
 
 class TestAllTargets:
@@ -228,12 +234,136 @@ class TestEmbedding:
         assert cfg.output_dir == (tmp_path / "out").resolve()
 
 
+class TestMigratedOptions:
+    """An option that moved should say where it went, not "check the spelling"."""
+
+    @pytest.mark.parametrize("section", ["model", "dataset"])
+    def test_model_and_dataset_point_at_the_measurement_point_config(
+        self, tmp_path, section
+    ):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["submission"][section] = {"name": "something"}
+        with pytest.raises(ConfigError, match="measurement point config") as e:
+            load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert "check the spelling" not in str(e.value)
+
+    def test_measured_accuracy_score_is_gone(self, tmp_path):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["submission"]["measured_accuracy_score"] = 0.9
+        with pytest.raises(ConfigError, match="no longer part of the system description"):
+            load_config(write_yaml(tmp_path / "c.yaml", data))
+
+    def test_a_genuine_typo_still_says_check_the_spelling(self, tmp_path):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["submission"]["submiter"] = "MyOrg"
+        with pytest.raises(ConfigError, match="check the spelling"):
+            load_config(write_yaml(tmp_path / "c.yaml", data))
+
+
+class TestEmptySections:
+    def test_a_section_with_everything_commented_out_is_not_an_error(self, tmp_path):
+        """`run:` followed by only comments parses as None. Rejecting that
+        punishes the submitter for tidying up the template."""
+        raw = tmp_path / "c.yaml"
+        raw.write_text(
+            "profile: endpoints\n"
+            "system:\n"
+            "  name: sut\n"
+            "nodes:\n"
+            "  include_local: true\n"
+            "run:\n"
+            "  # link_config: https://example.invalid\n"
+        )
+        cfg = load_config(raw)
+        assert cfg.run.link_config is None
+
+    def test_a_nested_empty_section_is_also_forgiven(self, tmp_path):
+        """The shipped endpoints template has commented entries under
+        submission.notes, so this is the shape a submitter actually reaches."""
+        raw = tmp_path / "c.yaml"
+        raw.write_text(
+            "profile: endpoints\n"
+            "system:\n"
+            "  name: sut\n"
+            "nodes:\n"
+            "  include_local: true\n"
+            "submission:\n"
+            "  division: standardized\n"
+            "  notes:\n"
+            "    # hardware: \"\"\n"
+        )
+        cfg = load_config(raw)
+        assert cfg.submission.notes.hardware is None
+        assert cfg.submission.division == "standardized"
+
+    @pytest.mark.parametrize(
+        ("body", "check"),
+        [
+            # An unset scalar means "unset", which is a valid answer. Coercing
+            # it to {} would report 'cooling: Input should be a valid string'.
+            ("system:\n  name: sut\n  cooling:\n", lambda c: c.system.cooling is None),
+            (
+                "system:\n  name: sut\nsubmission:\n  container_link:\n",
+                lambda c: c.submission.container_link is None,
+            ),
+            # power.redfish is Optional: a bare 'redfish:' means "no BMC
+            # capture", not "a RedfishConfig with no endpoint".
+            (
+                "system:\n  name: sut\npower:\n  redfish:\n    # endpoint: https://bmc\n",
+                lambda c: c.power.redfish is None,
+            ),
+            # A list whose every entry is commented out is an empty list.
+            (
+                "system:\n  name: sut\nnodes:\n  include_local: true\n  ssh:\n    # - u@h\n",
+                lambda c: c.nodes.ssh == [],
+            ),
+        ],
+    )
+    def test_an_unset_value_is_not_forced_into_a_section(self, tmp_path, body, check):
+        """Which keys get the empty-section treatment comes from the schema.
+
+        Coercing every None would turn these valid configs into type errors.
+        """
+        raw = tmp_path / "c.yaml"
+        raw.write_text("profile: endpoints\nnodes:\n  include_local: true\n" + body)
+        assert check(load_config(raw))
+
+    def test_an_empty_child_section_inherits_instead_of_erasing(self, tmp_path):
+        """The coercion runs per document, before the merge. Doing it after
+        would turn the parent's whole section into {} and lose it silently."""
+        write_yaml(
+            tmp_path / "org.yaml",
+            {
+                "submission": {"division": "standardized", "notes": {"hardware": "inherited"}},
+                "run": {"link_config": "https://example.invalid/inherited"},
+            },
+        )
+        child = tmp_path / "c.yaml"
+        child.write_text(
+            "extends: org.yaml\n"
+            "profile: endpoints\n"
+            "system:\n"
+            "  name: sut\n"
+            "nodes:\n"
+            "  include_local: true\n"
+            "submission:\n"
+            "  notes:\n"
+            "    # hardware: \"\"\n"
+            "run:\n"
+            "  # link_config: ...\n"
+        )
+        cfg = load_config(child)
+        assert cfg.submission.division == "standardized"
+        assert cfg.submission.notes.hardware == "inherited"
+        assert cfg.run.link_config == "https://example.invalid/inherited"
+
+
 class TestDottedGet:
     def test_reaches_into_models(self, good_config_file):
         cfg = load_config(good_config_file)
-        assert dotted_get(cfg, "submission.model.name") == "Llama-3.1-8B-Instruct"
+        assert dotted_get(cfg, "submission.notes.hardware") == "hw note"
 
     def test_missing_path_is_none(self, good_config_file):
         cfg = load_config(good_config_file)
-        assert dotted_get(cfg, "submission.model.nope") is None
+        assert dotted_get(cfg, "submission.notes.nope") is None
         assert dotted_get(cfg, "no.such.thing") is None
