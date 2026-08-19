@@ -4,9 +4,8 @@ name: endpoints
 title: MLPerf Endpoints
 round: "6.0"
 description: >-
-  Inference-serving endpoints. Writes the system description defined by
-  endpoints rules 8.2, in the 8.2.1 template shape, so heterogeneous and
-  disaggregated systems stay legible.
+  Inference-serving endpoints. Writes the rules 8.2 field set, keeping
+  node_types so heterogeneous and disaggregated systems stay legible.
 
 output_file: system_desc.json
 shape: nested

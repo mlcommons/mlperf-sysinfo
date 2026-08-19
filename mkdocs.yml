@@ -1,5 +1,5 @@
 site_name: mlperf-sysinfo
-site_description: Capture MLPerf system descriptions - one config format, one CLI, per-working-group profiles.
+site_description: Automatically capture the system description of a benchmarking machine.
 site_url: https://anandhu-eng.github.io/mlperf-sysinfo/
 repo_url: https://github.com/anandhu-eng/mlperf-sysinfo
 repo_name: anandhu-eng/mlperf-sysinfo

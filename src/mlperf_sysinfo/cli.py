@@ -25,6 +25,7 @@ from .preflight import CheckReport, run_check
 from .profiles import available as available_profiles
 from .profiles import load as load_profile
 from .report import summarise, validate
+from .suggest import closest, did_you_mean
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -35,7 +36,8 @@ EXIT_ERROR = 2
 app = cyclopts.App(
     name="mlperf-sysinfo",
     version=__version__,
-    help="Capture MLPerf system descriptions. One config, one CLI, a profile per working group.",
+    help="Automatically capture the system description of a benchmarking machine.",
+    help_epilogue="Run 'mlperf-sysinfo COMMAND --help' for the options a command takes.",
 )
 
 ConfigOpt = Annotated[
@@ -66,7 +68,7 @@ def _render_check(report: CheckReport, *, out_file: Path) -> None:
     config, profile = report.config, report.profile
 
     ui.blank()
-    ui.kv("profile", f"{ui.bold(profile.name)} {ui.dim(f'(v{profile.round} rules)')}")
+    ui.kv("profile", ui.bold(profile.name))
     ui.kv("output", str(out_file))
 
     all_targets = [str(t) for t in config.all_targets]
@@ -312,7 +314,7 @@ def show(path: Path) -> int:
 
     ui.blank()
     ui.kv("system", ui.bold(s.system_name), 12)
-    ui.kv("profile", f"{s.profile} {ui.dim(f'(v{s.profile_round} rules)')}", 12)
+    ui.kv("profile", s.profile, 12)
     ui.kv("captured", s.captured_at, 12)
     if not s.complete:
         ui.kv("state", ui.yellow("PARTIAL -- not the whole system"), 12)
@@ -355,7 +357,7 @@ def validate_cmd(
 
     ui.blank()
     ui.kv("file", str(report.path), 10)
-    ui.kv("profile", f"{report.profile_name} {ui.dim(f'(v{report.profile_round} rules)')}", 10)
+    ui.kv("profile", report.profile_name, 10)
 
     if report.problems:
         ui.heading("problems")
@@ -382,11 +384,59 @@ def profiles_cmd() -> int:
     ui.blank()
     for name in available_profiles():
         p = load_profile(name)
-        print(f"  {ui.bold(p.name.ljust(12))} {p.title}  {ui.dim(f'round {p.round}')}")
+        print(f"  {ui.bold(p.name.ljust(12))} {p.title}")
         ui.hint(f"  {p.description.strip()}")
         ui.hint(f"  {len(p.requires)} required field(s), writes {p.shape} {p.output_file}")
         ui.blank()
     return EXIT_OK
+
+
+#: Real flags, but only once a command has been named. Worth saying out loud
+#: because "-v" is as good a guess at this as at "--version", and it *is* "-v"
+#: on check and capture -- just not on its own.
+_COMMAND_ONLY_FLAGS = ("--verbose",)
+
+
+def _registered(*, flags: bool) -> list[str]:
+    """Top-level flag names, or command names. Asked of the app, not restated,
+    so adding either cannot leave this suggesting a stale set."""
+    return [name for name in app.resolved_commands() if name.startswith("-") is flags]
+
+
+def _report_parse_error(e: CycloptsError) -> None:
+    """Explain a command line that did not parse.
+
+    Three cases, because the useful next step differs:
+
+    * a leading token that looks like a flag gets its own message -- listing the
+      commands is no help to someone who typed "-v", and the suggestion is the
+      part they need to see first;
+    * a real command that was called wrongly gets pointed at its own --help,
+      which is where the arguments it wants are written down;
+    * anything else is passed through, since cyclopts already suggests command
+      names for a near miss.
+    """
+    typed = sys.argv[1] if len(sys.argv) > 1 else ""
+
+    if typed.startswith("-"):
+        guess = did_you_mean(typed, _registered(flags=True))
+        ui.error(f'"{typed}" is not a command or a top-level flag.{guess}')
+        for flag in closest(typed, _COMMAND_ONLY_FLAGS):
+            ui.hint(f'"{flag}" exists, but only on a command -- e.g. mlperf-sysinfo check {typed}')
+        ui.hint("Run 'mlperf-sysinfo --help' to see the commands.")
+        return
+
+    ui.error(str(e))
+    if typed in _registered(flags=False):
+        ui.hint(f"Run 'mlperf-sysinfo {typed} --help' for the arguments it takes.")
+
+
+# The epilogue is inherited by every subcommand, where "run COMMAND --help" is
+# advice the reader has already taken. Clear it on the children rather than
+# repeating help_epilogue="" on each decorator, so a seventh command cannot
+# forget to.
+for _subapp in app.subapps:
+    _subapp.help_epilogue = ""
 
 
 def main() -> None:
@@ -397,12 +447,14 @@ def main() -> None:
     A mistyped flag must not look like a failed check.
     """
     try:
-        code = app(exit_on_error=False)
+        # print_error=False: cyclopts would otherwise render its own panel and
+        # we would print the same text again underneath it.
+        code = app(exit_on_error=False, print_error=False)
     except SysinfoError as e:
         ui.error(str(e))
         sys.exit(EXIT_ERROR)
     except CycloptsError as e:
-        ui.error(str(e))
+        _report_parse_error(e)
         sys.exit(EXIT_ERROR)
     except KeyboardInterrupt:  # pragma: no cover
         ui.error("interrupted")

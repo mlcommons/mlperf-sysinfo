@@ -23,6 +23,10 @@ from .profiles import load as load_profile
 class ValidationReport:
     path: Path
     profile_name: str
+    #: The round whose rules were applied. Read from the file and offered to
+    #: embedders, but deliberately not printed: a profile always tracks the
+    #: current round, so showing it on every line is noise that also implies
+    #: there is a round to choose.
     profile_round: str
     problems: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -194,6 +198,7 @@ class Summary:
 
     path: Path
     profile: str
+    #: As on ValidationReport: available, not displayed.
     profile_round: str
     captured_at: str
     complete: bool

@@ -1,9 +1,9 @@
 # Copyright 2026 MLCommons contributors
 # SPDX-License-Identifier: Apache-2.0
-"""mlperf-sysinfo -- capture MLPerf system descriptions.
+"""mlperf-sysinfo -- capture the system description of a benchmarking machine.
 
-One config format, one command line, and a profile per working group that
-decides what is required and what the output looks like.
+Reads one config file, collects through the mlc-scripts automation, and writes
+whatever file the working group's profile asks for.
 
 Embedding it in another tool:
 

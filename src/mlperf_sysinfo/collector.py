@@ -266,7 +266,7 @@ def capture(
         "ok",
         "pre-flight check",
         f"{'passed' if not partial else 'passed with warnings'} -- "
-        f"{report.collectable_nodes} node(s), profile {profile.name} (v{profile.round} rules)",
+        f"{report.collectable_nodes} node(s), profile {profile.name}",
     )
 
     out_dir = config.output_dir

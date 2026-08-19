@@ -253,11 +253,13 @@ class TestMigratedOptions:
         with pytest.raises(ConfigError, match="no longer part of the system description"):
             load_config(write_yaml(tmp_path / "c.yaml", data))
 
-    def test_a_genuine_typo_still_says_check_the_spelling(self, tmp_path):
+    def test_a_genuine_typo_gets_a_suggestion_not_the_migration_message(self, tmp_path):
         data = copy.deepcopy(GOOD_CONFIG)
         data["submission"]["submiter"] = "MyOrg"
-        with pytest.raises(ConfigError, match="check the spelling"):
+        with pytest.raises(ConfigError) as e:
             load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert 'Did you mean "submitter"?' in str(e.value)
+        assert "measurement point" not in str(e.value)
 
 
 class TestEmptySections:

@@ -18,6 +18,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .errors import ConfigError
+from .suggest import did_you_mean, options_at
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -598,11 +599,18 @@ def _format_validation_error(path: Path, error: ValidationError) -> str:
     """Turn pydantic's output into something a person can act on."""
     lines = [f"{path}: config is not valid"]
     for err in error.errors():
-        loc = ".".join(str(p) for p in err["loc"]) or "(root)"
+        loc_parts = err["loc"]
+        loc = ".".join(str(p) for p in loc_parts) or "(root)"
         msg = err["msg"]
         if err["type"] == "extra_forbidden":
-            msg = MIGRATED_PATHS.get(
-                loc, "unknown option -- check the spelling, or see 'mlperf-sysinfo init'"
-            )
+            migrated = MIGRATED_PATHS.get(loc)
+            if migrated:
+                msg = migrated
+            else:
+                typed = str(loc_parts[-1]) if loc_parts else ""
+                hint = did_you_mean(typed, options_at(SysinfoConfig, loc_parts))
+                msg = f"unknown option.{hint}" if hint else (
+                    "unknown option -- check the spelling, or see 'mlperf-sysinfo init'"
+                )
         lines.append(f"  {loc}: {msg}")
     return "\n".join(lines)

@@ -11,6 +11,8 @@ machine, built on top of the
 pip install mlperf-sysinfo
 ```
 
+`mlperf-sysinfo --help` lists the commands; `mlperf-sysinfo <command> --help` shows what one takes.
+
 ## Quick Run
 
 The steps below capture a system description for a CPU-only system, using
@@ -86,7 +88,7 @@ mlperf-sysinfo check -c sysinfo.yaml
 ```console
 $ mlperf-sysinfo check -c sysinfo.yaml
 
-  profile    endpoints (v6.0 rules)
+  profile    endpoints
   output     results/sysinfo/system_desc.json
 
 NODES
@@ -127,7 +129,7 @@ mlperf-sysinfo capture -c sysinfo.yaml
 ```console
 $ mlperf-sysinfo capture -c sysinfo.yaml
 
-  ✓ pre-flight check     passed -- 1 node(s), profile endpoints (v6.0 rules)
+  ✓ pre-flight check     passed -- 1 node(s), profile endpoints
   ✓ collection           1 of 1 node(s) returned hardware
 
   1 node(s) - profile endpoints
@@ -152,7 +154,7 @@ mlperf-sysinfo validate results/sysinfo/system_desc.json
 $ mlperf-sysinfo validate results/sysinfo/system_desc.json
 
   file       results/sysinfo/system_desc.json
-  profile    endpoints (v6.0 rules)
+  profile    endpoints
 
 WARNINGS
   ! cooling on every node type is empty -- Reviewers ask how the nodes are cooled

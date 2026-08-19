@@ -228,3 +228,26 @@ notes:
 
 Every string is scanned, not only the fields your profile requires — a
 placeholder in any field still reaches the submission file.
+
+## Misspelled options
+
+An option this file does not recognise is an error rather than something
+quietly ignored, because a silently dropped `cooling` reads exactly like a
+`cooling` that was never set. Where a real option is close enough, it is named:
+
+```console
+$ mlperf-sysinfo check -c sysinfo.yaml
+error  sysinfo.yaml: config is not valid
+  system.categry: unknown option. Did you mean "category"?
+  nodes.include-local: unknown option. Did you mean "include_local"?
+  submission.divison: unknown option. Did you mean "division"?
+```
+
+Matching ignores case, and treats `-` and `_` as the same character, so
+`include-local` finds `include_local`. Only options valid *at that point in the
+file* are suggested: a stray key under `submission.notes` is matched against
+`hardware` and `software`, never against the top-level names. An option that
+was removed rather than misspelled says where it went instead — see
+[Outputs](outputs.md#endpoints-grouped).
+
+Profile names and the options inside a profile file work the same way.

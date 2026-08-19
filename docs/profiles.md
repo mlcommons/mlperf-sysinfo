@@ -21,10 +21,10 @@ Both allow Redfish power capture when `power.redfish` is configured.
 ```console
 $ mlperf-sysinfo profiles
 
-  endpoints    MLPerf Endpoints  round 6.0
+  endpoints    MLPerf Endpoints
     5 required field(s), writes nested system_desc.json
 
-  inference    MLPerf Inference  round 6.0
+  inference    MLPerf Inference
     6 required field(s), writes flat system_desc.json
 ```
 
@@ -64,8 +64,13 @@ error  profile 'endpoints@v6.0' pins a version. Profiles always track the curren
 ```
 
 The resolved round is stamped into every output file, so a captured file still
-records the rules that produced it. If reproducing an older round ever becomes a
-real need, pinning can be added later without invalidating any existing config.
+records the rules that produced it. It is not printed anywhere in terminal
+output: since there is nothing to choose, a round on every line is noise, and
+noise that implies otherwise. Read it back with
+`jq .mlperf_sysinfo.profile_round system_desc.json`.
+
+If reproducing an older round ever becomes a real need, pinning can be added
+later without invalidating any existing config.
 
 ## Writing one
 

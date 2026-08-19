@@ -11,6 +11,14 @@ Six commands. The important one is `check`.
 | [`validate`](#validate) | Check a captured file against a profile before submitting it |
 | [`profiles`](#profiles) | List the built-in profiles |
 
+Every command documents its own options, which is the quickest way to check one
+without leaving the terminal:
+
+```bash
+mlperf-sysinfo --help            # the commands
+mlperf-sysinfo capture --help    # what capture takes
+```
+
 ## Exit codes
 
 `check` is meant to be scriptable, so the codes are a contract. A mistyped flag
@@ -63,7 +71,7 @@ collected and nothing is written.
 ```console
 $ mlperf-sysinfo check -c sysinfo.yaml
 
-  profile    endpoints (v6.0 rules)
+  profile    endpoints
   output     results/h100_run1/system_desc.json
 
 NODES
@@ -85,7 +93,7 @@ file.
 ```console
 $ mlperf-sysinfo check -c ph.yaml
 
-  profile    endpoints (v6.0 rules)
+  profile    endpoints
   output     results/h100_run1/system_desc.json
 
 NODES
@@ -140,7 +148,7 @@ writes the output file.
 ```console
 $ mlperf-sysinfo capture -c sysinfo.yaml
 
-  ✓ pre-flight check     passed -- 1 node(s), profile endpoints (v6.0 rules)
+  ✓ pre-flight check     passed -- 1 node(s), profile endpoints
   ✓ collection           1 of 1 node(s) returned hardware
 
   1 node(s) - 8 accelerators - profile endpoints
@@ -181,7 +189,7 @@ error  only 1 of 2 node(s) returned hardware. See .../automation.log for which
 With `--allow-partial`:
 
 ```console
-  ✓ pre-flight check     passed with warnings -- 1 node(s), profile endpoints (v6.0 rules)
+  ✓ pre-flight check     passed with warnings -- 1 node(s), profile endpoints
   ✗ root@node3:22        skipped -- ssh: connection timed out
   ! collection           only 1 of 2 node(s) returned hardware
 
@@ -208,7 +216,7 @@ asserted.
 $ mlperf-sysinfo show results/h100_run1/system_desc.json
 
   system       H100x8
-  profile      endpoints (v6.0 rules)
+  profile      endpoints
   captured     2026-08-10T14:08:36+00:00
   size         8x NVIDIA H100 80GB HBM3
 
@@ -250,7 +258,7 @@ inside `node_types` — and refuses a partial capture.
 $ mlperf-sysinfo validate results/h100_run1/system_desc.json
 
   file       results/h100_run1/system_desc.json
-  profile    inference (v6.0 rules)
+  profile    inference
 
   Valid. 6 required field(s) present.
 ```
@@ -259,7 +267,7 @@ $ mlperf-sysinfo validate results/h100_run1/system_desc.json
 $ mlperf-sysinfo validate broken.json
 
   file       broken.json
-  profile    endpoints (v6.0 rules)
+  profile    endpoints
 
 PROBLEMS
   ✗ partial capture: 1 of 2 nodes answered. This file does not describe the whole system.
@@ -280,16 +288,55 @@ rules.
 ```console
 $ mlperf-sysinfo profiles
 
-  endpoints    MLPerf Endpoints  round 6.0
-    Inference-serving endpoints. Keeps the multi-node structure in the output so
-    heterogeneous and disaggregated systems stay legible.
+  endpoints    MLPerf Endpoints
+    Inference-serving endpoints. Writes the rules 8.2 field set, keeping
+    node_types so heterogeneous and disaggregated systems stay legible.
     5 required field(s), writes nested system_desc.json
 
-  inference    MLPerf Inference  round 6.0
+  inference    MLPerf Inference
     MLPerf Inference submissions. Writes the flat field set the submission checker
     expects, with node hardware lifted to the top level.
     6 required field(s), writes flat system_desc.json
 ```
+
+## Misspelled commands and flags
+
+A command line that does not parse points at the help page that would have
+answered the question:
+
+```console
+$ mlperf-sysinfo show
+error  Command "show" parameter --path requires an argument.
+  Run 'mlperf-sysinfo show --help' for the arguments it takes.
+```
+
+It also names the closest real command, flag or option rather than only listing
+what exists:
+
+```console
+$ mlperf-sysinfo capure
+error  Unknown command "capure". Did you mean "capture"? Available commands: init, check, capture, show, validate, profiles.
+
+$ mlperf-sysinfo check --ofline -c sysinfo.yaml
+error  Unknown option: --ofline. Did you mean --offline?
+```
+
+A leading token that looks like a flag is matched against the flags rather than
+the commands, since `-v` is a stab at `--version`, not at `validate`:
+
+```console
+$ mlperf-sysinfo -v
+error  "-v" is not a command or a top-level flag. Did you mean "--version"?
+  "--verbose" exists, but only on a command -- e.g. mlperf-sysinfo check -v
+  Run 'mlperf-sysinfo --help' to see the commands.
+```
+
+`-v` is deliberately not an alias for `--version`: it is already `--verbose` on
+`check` and `capture`, and one letter meaning two things is worse than being
+asked which you wanted.
+
+Misspelled config options get the same treatment — see
+[Configuration](configuration.md#misspelled-options).
 
 ## Colour
 

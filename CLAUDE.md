@@ -55,6 +55,7 @@ profile and no collection change.
 | `report.py` | Reads a captured file back on its own — `show` and `validate` |
 | `cli.py` / `ui.py` | The `mlperf-sysinfo` command line (cyclopts) and its terminal rendering |
 | `errors.py` | Every deliberate failure is one of `SysinfoError`'s subclasses |
+| `suggest.py` | "Did you mean ...?" for config options, profile names and flags |
 
 ### Config and profiles
 
@@ -70,6 +71,12 @@ profile and no collection change.
   `points/<point>/config.yml`), which this tool does not write.
   `config.MIGRATED_PATHS` maps the removed options to a message saying where
   they went, so an old config gets that instead of "unknown option".
+- An unrecognised option, profile name or leading flag is matched against the
+  real names by `suggest.py`, which ignores case and treats `-`/`_` alike and
+  accepts a prefix (so `-v` reaches `--version` and `sshkey` reaches
+  `ssh_key_preconfigured`). Options are matched against the vocabulary valid
+  *at that path*, never the whole schema. Nothing close enough means no
+  suggestion: a wrong guess sends someone off after a field they never wanted.
 - `SysinfoConfig.all_targets` is `nodes.ssh` plus `serving.node` (deduplicated)
   if it names a machine not already in that list — a node only mentioned as
   where the server runs is still part of the system and gets reached during
@@ -81,9 +88,11 @@ profile and no collection change.
   `shape` (`nested` keeps `node_types` for heterogeneous/disaggregated
   systems; `flat` lifts hardware to the top level for the MLPerf Inference
   submission checker), and `benchmark` (which field set to collect). Profiles
-  always track the *current* MLPerf round —
-  there is no pinning, so a profile change applies to everyone on the next
-  release, which is why profile changes get careful review.
+  always track the *current* MLPerf round — there is no pinning, so a profile
+  change applies to everyone on the next release, which is why profile changes
+  get careful review. `round` is stamped into the output file but never printed
+  to the terminal: with nothing to choose, showing it on every line is noise
+  that also implies there is a choice.
 
 ### Two kinds of problem, handled differently
 

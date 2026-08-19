@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mlperf-sysinfo"
 version = "1.0.0a2"
-description = "Capture MLPerf system descriptions: one config format, one CLI, per-working-group profiles."
+description = "Automatically capture the system description of a benchmarking machine."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"

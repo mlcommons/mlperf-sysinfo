@@ -17,6 +17,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..errors import ProfileError
+from ..suggest import did_you_mean, options_at
 
 _BUILTIN_DIR = Path(__file__).parent
 
@@ -49,7 +50,14 @@ class Profile(BaseModel):
 
     name: str
     title: str
-    round: str = Field(description="The MLPerf round these requirements describe.")
+    round: str = Field(
+        description=(
+            "The MLPerf round these requirements describe. Stamped into every "
+            "output file so a capture records the rules that produced it. Not "
+            "shown in terminal output: a profile always tracks the current "
+            "round, so there is nothing to choose and nothing to compare."
+        )
+    )
     description: str = ""
     output_file: str = "system_desc.json"
     shape: Literal["nested", "flat"] = "nested"
@@ -96,10 +104,16 @@ def _load_file(path: Path) -> Profile:
     except ValidationError as e:
         lines = [f"{path}: not a valid profile"]
         for err in e.errors():
-            loc = ".".join(str(part) for part in err["loc"]) or "(root)"
+            loc_parts = err["loc"]
+            loc = ".".join(str(part) for part in loc_parts) or "(root)"
             message = err["msg"]
             if err["type"] == "extra_forbidden":
-                message = "unknown profile option -- check the spelling"
+                typed = str(loc_parts[-1]) if loc_parts else ""
+                options = options_at(Profile, loc_parts)
+                hint = did_you_mean(typed, options)
+                message = f"unknown profile option.{hint}" if hint else (
+                    "unknown profile option -- check the spelling"
+                )
             lines.append(f"  {loc}: {message}")
         raise ProfileError("\n".join(lines)) from e
 
@@ -129,9 +143,10 @@ def load(ref: str, *, relative_to: Path | None = None) -> Profile:
 
     builtin = _BUILTIN_DIR / f"{ref}.yaml"
     if not builtin.exists():
-        names = ", ".join(available())
+        names = available()
         raise ProfileError(
-            f"unknown profile {ref!r}. Built-in profiles: {names}. "
+            f"unknown profile {ref!r}.{did_you_mean(ref, names)} "
+            f"Built-in profiles: {', '.join(names)}. "
             f"To use your own, point 'profile:' at a .yaml file."
         )
     return _load_file(builtin)
