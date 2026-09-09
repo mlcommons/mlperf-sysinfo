@@ -31,6 +31,7 @@ from .config import (
     is_placeholder,
 )
 from .logs import STYLED
+from .output import normalize_training_status
 from .profiles import Profile
 
 SSH_TIMEOUT = 15
@@ -273,6 +274,18 @@ def run_check(
     for path, value in find_placeholders(config.model_dump(exclude={"source_path"})):
         if path not in already:
             report.placeholder_other.append((path, value))
+
+    # Training accepts four availability strings and nothing else. Catching a
+    # fifth here rather than at write time is the point of the check: the
+    # alternative is a submitter finding out from the training checker after
+    # a multi-node capture has already run.
+    if profile.benchmark == "training":
+        _, bad_status = normalize_training_status(config.system.availability)
+        if bad_status:
+            report.missing_required.append(("system.availability", bad_status))
+            # It counted as satisfied above -- it is filled in, just not with
+            # something training accepts.
+            report.satisfied_count = max(0, report.satisfied_count - 1)
 
     if config.nodes.groups:
         declared = sum(

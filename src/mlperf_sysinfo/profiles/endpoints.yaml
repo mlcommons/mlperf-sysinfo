@@ -4,8 +4,7 @@ name: endpoints
 title: MLPerf Endpoints
 round: "6.0"
 description: >-
-  Inference-serving endpoints. Writes the rules 8.2 field set, keeping
-  node_types so heterogeneous and disaggregated systems stay legible.
+  Inference-serving endpoints. Writes the rules 8.2 field set.
 
 output_file: system_desc.json
 shape: nested
@@ -22,15 +21,15 @@ collect:
 # should ask for them.
 requires:
   system.name: Identifier for the system under test
-  system.category: System category, datacenter or edge
-  system.availability: Availability status, e.g. available, preview or rdi
-  submission.division: Submission division, e.g. standardized, serviced or rdi
-  serving.url: The endpoint under test -- written to the submission as endpoint_url
+  system.category: Whether this is a datacenter or an edge system
+  system.availability: Availability at submission time, e.g. available, preview or rdi
+  submission.division: One of standardized, serviced or rdi
+  serving.url: The endpoint under test
 
 recommends:
   system.accelerator: Without it, accelerators are not probed at all
   system.cooling: Reviewers ask how the nodes are cooled
   serving.node: Enables parallelism and batch settings to be read from the startup log
-  submission.notes.hardware: Becomes hw_notes on every node type
-  submission.notes.software: Becomes sw_notes on every node type
+  submission.notes.hardware: Hardware detail no probe can report, such as interconnect topology or firmware
+  submission.notes.software: Software detail no probe can report, such as versions, flags or patches
   run.link_config: Reviewers use it to reproduce the run

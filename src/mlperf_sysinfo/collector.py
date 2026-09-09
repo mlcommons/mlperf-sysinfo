@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import time
 from collections.abc import Callable
@@ -99,11 +100,32 @@ def _log_details(
         for node in report.nodes
     ]
     return {
-        "Profile": f"{profile.name} (round {profile.round}, benchmark {profile.benchmark})",
+        "Profile": (
+            f"{profile.name} (round {profile.round}, benchmark {profile.benchmark})"
+            if profile.round
+            else f"{profile.name} (benchmark {profile.benchmark})"
+        ),
         "Config": str(config.source_path or "(assembled in memory)"),
         "Output": str(out_file),
         "Nodes": f"{len(labels)} -- {', '.join(labels)}" if labels else "0",
     }
+
+
+def output_filename(config: SysinfoConfig, profile: Profile) -> str:
+    """The deliverable's name: the config's, or the profile's with the system
+    name substituted in.
+
+    A training submission stores its system description as
+    ``<submitter>/systems/<system_name>.json``, so for that profile the
+    filename carries meaning rather than being a convention. Path separators
+    in a system name are flattened -- the name is a filename here, and one
+    containing a slash would otherwise write outside the output directory.
+    """
+    name = config.output.file or profile.output_file
+    if "{system_name}" not in name:
+        return name
+    safe = re.sub(r"[/\\\s]+", "_", config.system.name.strip()).strip("._") or "system_desc"
+    return name.replace("{system_name}", safe)
 
 
 def _require_mlc():
@@ -285,7 +307,7 @@ def capture(
     work_dir = out_dir / WORK_DIRNAME
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    out_file = out_dir / (config.output.file or profile.output_file)
+    out_file = out_dir / output_filename(config, profile)
     with RunLog.open(
         work_dir, command="capture", details=_log_details(config, profile, report, out_file)
     ) as runlog:

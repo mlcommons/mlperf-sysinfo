@@ -18,13 +18,13 @@ collect:
 
 requires:
   system.name: Identifier for the system under test
-  system.category: Maps to system_type in the submission
-  system.availability: Maps to status in the submission
+  system.category: Whether this is a datacenter or an edge system
+  system.availability: Availability at submission time, e.g. available, preview or rdi
   submission.submitter: Organisation making the submission
   submission.contact: Contact email for questions about this submission
-  submission.division: Submission division, e.g. closed or open
+  submission.division: Either closed or open
 
 recommends:
   system.accelerator: Without it, accelerators are not probed at all
-  submission.notes.software: The checker's sw_notes field
-  submission.notes.hardware: The checker's hw_notes field
+  submission.notes.software: Software detail no probe can report, such as versions, flags or patches
+  submission.notes.hardware: Hardware detail no probe can report, such as interconnect topology or firmware

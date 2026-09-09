@@ -1,0 +1,54 @@
+# MLPerf system description -- training profile
+#
+#   mlperf-sysinfo check   -c sysinfo.yaml     # validate + reach everything
+#   mlperf-sysinfo capture -c sysinfo.yaml     # collect and write the file
+#
+# Writes the flat field set mlperf_logging/system_desc_checker validates.
+# Anything detectable -- CPU, memory, accelerators, node count, OS, software
+# stack -- is deliberately absent below. Only what cannot be detected belongs
+# in this file.
+#
+# The output is named after system.name, because a training submission stores
+# it as <submitter>/systems/<system_name>.json.
+
+profile: training
+
+output:
+  dir: results/sysinfo
+
+system:
+  name: CHANGEME                 # e.g. dgx-h100-n8 -- also the output filename
+
+  # Training accepts exactly these four, and nothing else. Plain "available"
+  # is not one of them: training splits it into on-premise and cloud.
+  availability: Available on-premise
+  #   Available on-premise
+  #   Available cloud
+  #   Preview
+  #   Research, Development, or Internal (RDI)
+
+  accelerator: cuda              # cuda | rocm | xpu | none
+  cooling: air                   # air | liquid | passive
+
+  # How the nodes are wired to each other. No probe can see past the local
+  # NIC. A single-node system should say so rather than leave it blank.
+  networking_topology: CHANGEME  # e.g. "rail-optimized fat tree, 8x400G per node"
+
+nodes:
+  include_local: true            # single machine: describe the one running this
+  ssh: []                        # add user@host entries for a multi-node system
+  ssh_key_preconfigured: false
+
+training:
+  # The framework and version the run used. It lives inside the container
+  # image, which this tool never opens.
+  framework: CHANGEME            # e.g. "NVIDIA PyTorch Release 25.04"
+  # Optional short tag for that build. Written only when set.
+  # framework_name: ngc25.04_pytorch
+
+submission:
+  submitter: CHANGEME
+  division: closed               # closed | open
+  notes:
+    hardware: ""                 # becomes hw_notes
+    software: ""                 # becomes sw_notes

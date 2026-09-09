@@ -13,8 +13,6 @@ machine, built on top of the
 pip install mlperf-sysinfo
 ```
 
-`mlperf-sysinfo --help` lists the commands; `mlperf-sysinfo <command> --help` shows what one takes.
-
 ## Quick Run
 
 The steps below capture a system description for a CPU-only system, using
@@ -39,12 +37,11 @@ $ mlperf-sysinfo init endpoints
 
 ### Step 2 -- edit `sysinfo.yaml`
 
-Fill in the fields the profile requires: a name for the system, its category
-and availability, the division, and the endpoint you served against.
-`nodes.include_local` is already `true` with an empty `ssh` list, so leave that
-section alone -- this points at the machine you're on. For a CPU-only capture,
-set `accelerator: none` and drop `serving.node`; without it the parallelism and
-batch settings are simply not read, which is a warning rather than an error.
+The sample below is a complete config for a CPU-only capture of the machine
+you're on.
+
+See [The `endpoints` config](configuration/endpoints.md) for every option this
+profile reads.
 
 ```yaml
 profile: endpoints
@@ -68,16 +65,6 @@ serving:
 submission:
   division: standardized
 ```
-
-`serving.url` is required because it is written to the submission as
-`endpoint_url`. `check` probes it, but nothing answering is only a warning --
-the value is submission metadata, not a liveness test. Rules 8.2 also allow a
-description in place of a URL, for a hosted endpoint with no public address:
-`url: "Managed endpoint, us-east-1, no public URL"` is accepted and not probed.
-
-!!! note "The model and dataset are not in this file"
-    They are measurement point metadata (endpoints rules 8.3) and belong in
-    each point's `points/<point>/config.yml`, which this tool does not write.
 
 ### Step 3 -- check the config
 
@@ -106,8 +93,8 @@ REQUIRED BY PROFILE 'ENDPOINTS'
 WORTH FILLING IN
   ! system.cooling              empty   Reviewers ask how the nodes are cooled
   ! serving.node                empty   Enables parallelism and batch settings to be read from the startup log
-  ! submission.notes.hardware   empty   Becomes hw_notes on every node type
-  ! submission.notes.software   empty   Becomes sw_notes on every node type
+  ! submission.notes.hardware   empty   Hardware detail no probe can report, such as interconnect topology or firmware
+  ! submission.notes.software   empty   Software detail no probe can report, such as versions, flags or patches
   ! run.link_config             empty   Reviewers use it to reproduce the run
 
 [2026-08-19 21:39:59] INFO     check: ready to capture
@@ -159,8 +146,8 @@ $ mlperf-sysinfo validate results/sysinfo/system_desc.json
 
 WARNINGS
   ! cooling on every node type is empty -- Reviewers ask how the nodes are cooled
-  ! hw_notes on every node type is empty -- Becomes hw_notes on every node type
-  ! sw_notes on every node type is empty -- Becomes sw_notes on every node type
+  ! hw_notes on every node type is empty -- Hardware detail no probe can report, such as interconnect topology or firmware
+  ! sw_notes on every node type is empty -- Software detail no probe can report, such as versions, flags or patches
   ! link_config is empty -- Reviewers use it to reproduce the run
 
 [2026-08-19 21:42:30] INFO     report: valid -- 5 required field(s) present, 4 warning(s)
@@ -200,8 +187,7 @@ WARNINGS
 | If you want to… | Read |
 | --- | --- |
 | Understand how the pieces fit together | [Architecture](architecture.md) |
-| Write or fix a config | [The config file](configuration.md) |
+| Write or fix a config | [The config file](configuration/index.md) |
 | Look up a command or an exit code | [Commands](commands.md) |
 | See what a real capture produces | [Sample outputs](outputs.md) |
-| Onboard your working group | [Profiles](profiles.md) |
 | Call it from your own tool | [Embedding it](embedding.md) |

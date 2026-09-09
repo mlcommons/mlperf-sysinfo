@@ -37,11 +37,11 @@ $ mlperf-sysinfo init endpoints
 
 **Step 2 -- edit `sysinfo.yaml`**
 
-Fill in a system name, the division, and the endpoint you served against.
-`nodes.include_local` is already `true` with an empty `ssh` list, so leave
-that section alone. For a CPU-only capture, set `accelerator: none` and drop
-`serving.node` -- without it the parallelism and batch settings are simply
-not read, which is a warning rather than an error.
+The sample below is a complete config for a CPU-only capture of the machine
+you're on.
+
+See [The config file](https://anandhu-eng.github.io/mlperf-sysinfo/configuration/)
+for every option, and for what each working group requires.
 
 ```yaml
 profile: endpoints
@@ -65,12 +65,6 @@ serving:
 submission:
   division: standardized
 ```
-
-`serving.url` is required because it is written to the submission as
-`endpoint_url`. `check` probes it, but nothing answering is only a warning --
-the value is submission metadata, not a liveness test. Rules 8.2 also allow a
-description in place of a URL, for a hosted endpoint with no public address:
-`url: "Managed endpoint, us-east-1, no public URL"` is accepted and not probed.
 
 **Step 3 -- check the config**
 
@@ -99,8 +93,8 @@ REQUIRED BY PROFILE 'ENDPOINTS'
 WORTH FILLING IN
   ! system.cooling              empty   Reviewers ask how the nodes are cooled
   ! serving.node                empty   Enables parallelism and batch settings to be read from the startup log
-  ! submission.notes.hardware   empty   Becomes hw_notes on every node type
-  ! submission.notes.software   empty   Becomes sw_notes on every node type
+  ! submission.notes.hardware   empty   Hardware detail no probe can report, such as interconnect topology or firmware
+  ! submission.notes.software   empty   Software detail no probe can report, such as versions, flags or patches
   ! run.link_config             empty   Reviewers use it to reproduce the run
 
 [2026-08-19 21:39:59] INFO     check: ready to capture
@@ -152,8 +146,8 @@ $ mlperf-sysinfo validate results/sysinfo/system_desc.json
 
 WARNINGS
   ! cooling on every node type is empty -- Reviewers ask how the nodes are cooled
-  ! hw_notes on every node type is empty -- Becomes hw_notes on every node type
-  ! sw_notes on every node type is empty -- Becomes sw_notes on every node type
+  ! hw_notes on every node type is empty -- Hardware detail no probe can report, such as interconnect topology or firmware
+  ! sw_notes on every node type is empty -- Software detail no probe can report, such as versions, flags or patches
   ! link_config is empty -- Reviewers use it to reproduce the run
 
 [2026-08-19 21:42:30] INFO     report: valid -- 5 required field(s) present, 4 warning(s)
@@ -222,7 +216,8 @@ and what the output looks like.
 | Profile | Output | Notes |
 | --- | --- | --- |
 | `endpoints` | grouped, keeps `node_types` | Probes the endpoint and parses the serving log |
-| `inference` | flat, matches the submission checker | Hardware lifted to the top level |
+| `inference` | flat, matches the Inference submission checker | Hardware lifted to the top level |
+| `training` | flat, matches `mlperf_logging/system_desc_checker` | A different checker from `inference`, with a different field set. Named `<system_name>.json` |
 
 `mlperf-sysinfo profiles` lists them. All profiles live in this repo and ship
 with the package. A config may also point at a file --

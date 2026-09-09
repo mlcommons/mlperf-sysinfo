@@ -1,0 +1,52 @@
+# Copyright 2026 MLCommons contributors
+# SPDX-License-Identifier: Apache-2.0
+name: training
+title: MLPerf Training
+description: >-
+  MLPerf Training submissions. Writes the flat <system_desc_id>.json that
+  mlperf_logging/system_desc_checker validates -- a different checker from the
+  one Inference uses, with a different field set.
+
+# The submission layout is <submitter>/systems/<system_name>.json, so the
+# filename is part of the answer rather than a convention. {system_name} is
+# substituted from the config.
+output_file: "{system_name}.json"
+shape: flat
+benchmark: training
+
+# No round. MLPerf Training numbers its rulesets independently of Inference,
+# and stamping a number that turns out to be the wrong one is worse than
+# stamping none -- see the profile_round note in docs/outputs.md.
+
+collect:
+  serving_log: false
+  endpoint_probe: false
+  redfish: true
+
+# The checker requires 33 fields. Everything absent from this list is probed;
+# what is here is what no probe can answer.
+requires:
+  system.name: >-
+    Identifier for the system under test, and the name of the file a training
+    submission stores under its systems directory
+  system.availability: >-
+    One of the four availability strings training accepts, e.g.
+    "Available on-premise" or "Preview". No other value passes the checker
+  system.cooling: How the nodes are cooled, e.g. air or liquid
+  system.networking_topology: >-
+    How the nodes are wired to each other, e.g. "rail-optimized fat tree".
+    Nothing can see past the local NIC, so a single-node system should say so
+  submission.submitter: Organisation making the submission
+  submission.division: Either closed or open
+  training.framework: >-
+    What the run was trained with, and its version, e.g. "NVIDIA PyTorch
+    Release 25.04". It lives inside the container image, which this tool
+    never opens
+
+recommends:
+  system.accelerator: Without it, accelerators are not probed at all
+  submission.notes.hardware: Hardware detail no probe can report, such as interconnect topology or firmware
+  submission.notes.software: Software detail no probe can report, such as versions, flags or patches
+  training.framework_name: >-
+    Short tag for that build, e.g. "ngc25.04_pytorch". Written only when set,
+    since the checker does not ask for it

@@ -142,3 +142,25 @@ if not report.ok:
 
 Both work on the file alone — a capture carries the profile it was made under,
 so neither needs the original config.
+
+## In a benchmark config
+
+Nest the whole thing under `system_info:` in a benchmark config and it validates
+identically. If there is no `output` block, a top-level `report_dir` is used:
+
+```yaml
+name: llama3-perf-run
+report_dir: results/run1
+datasets:
+  - name: cnn_dailymail
+
+system_info:
+  profile: endpoints
+  system:
+    name: H100x8_vLLM
+  nodes:
+    ssh: [root@node1]
+  submission:
+    division: standardized
+    # ...
+```

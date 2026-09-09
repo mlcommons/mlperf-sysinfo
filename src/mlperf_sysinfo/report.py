@@ -80,7 +80,7 @@ def validate(path: str | Path, *, profile_name: str | None = None) -> Validation
         )
 
     for config_path, why in profile.requires.items():
-        key = output_key_for(config_path, profile.shape)
+        key = output_key_for(config_path, profile)
         if key is None:
             continue
         report.checked += 1
@@ -97,7 +97,9 @@ def validate(path: str | Path, *, profile_name: str | None = None) -> Validation
         if not node_types:
             report.problems.append("node_types is empty -- no hardware was collected")
     else:
-        if not data.get("number_of_nodes"):
+        # Training writes every value as a string, so "0" is the empty case
+        # here and a bare falsiness test would pass it.
+        if str(data.get("number_of_nodes") or "0").strip() in ("", "0"):
             report.problems.append("number_of_nodes is zero -- no hardware was collected")
         if not data.get("host_processor_model_name"):
             report.warnings.append(
@@ -105,7 +107,7 @@ def validate(path: str | Path, *, profile_name: str | None = None) -> Validation
             )
 
     for config_path, why in profile.recommends.items():
-        key = output_key_for(config_path, profile.shape)
+        key = output_key_for(config_path, profile)
         if key is None:
             continue
         if _is_empty(data, key):
@@ -232,6 +234,17 @@ _SUPPLIED_FLAT = [
     ("status", "status"),
 ]
 
+#: Training has no submitter_contact and no system_type, and carries two
+#: fields the other two shapes do not. Reusing _SUPPLIED_FLAT would print a
+#: row for each missing one and none for these.
+_SUPPLIED_TRAINING = [
+    ("submitter", "submitter"),
+    ("division", "division"),
+    ("status", "status"),
+    ("framework", "framework"),
+    ("net topology", "host_networking_topology"),
+]
+
 _DETECTED_FIELDS = [
     ("cpu", "host_processor_model_name"),
     ("cores", "host_processor_core_count"),
@@ -267,6 +280,11 @@ def summarise(path: str | Path) -> Summary:
     data = load_capture(path)
     stamp = data.get("mlperf_sysinfo") or {}
     shape_name = stamp.get("shape") or ("nested" if "node_types" in data else "flat")
+    # Files written before the stamp carried a benchmark are read by their
+    # fields: only training has host_networking_topology at the top level.
+    benchmark = stamp.get("benchmark") or (
+        "training" if "host_networking_topology" in data and "system_type" not in data else ""
+    )
 
     node_types = data.get("node_types") or []
     accel_total = accelerator_count(node_types or [data])
@@ -289,7 +307,12 @@ def summarise(path: str | Path) -> Summary:
         if first.get(key) not in (None, "", "N/A", "Not available")
     ]
 
-    table = _SUPPLIED_NESTED if shape_name == "nested" else _SUPPLIED_FLAT
+    if benchmark == "training":
+        table = _SUPPLIED_TRAINING
+    elif shape_name == "nested":
+        table = _SUPPLIED_NESTED
+    else:
+        table = _SUPPLIED_FLAT
     supplied = [(label, str(data.get(key))) for label, key in table if data.get(key)]
 
     return Summary(

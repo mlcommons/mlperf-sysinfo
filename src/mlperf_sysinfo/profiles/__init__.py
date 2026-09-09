@@ -54,12 +54,16 @@ class Profile(BaseModel):
     name: str
     title: str
     round: str = Field(
+        default="",
         description=(
             "The MLPerf round these requirements describe. Stamped into every "
             "output file so a capture records the rules that produced it. Not "
             "shown in terminal output: a profile always tracks the current "
-            "round, so there is nothing to choose and nothing to compare."
-        )
+            "round, so there is nothing to choose and nothing to compare. "
+            "Optional: a working group whose round numbering is still moving "
+            "leaves it unset rather than stamping a number that will be wrong, "
+            "and no profile_round is written."
+        ),
     )
     description: str = ""
     output_file: str = "system_desc.json"

@@ -217,3 +217,52 @@ class TestShow:
         data = copy.deepcopy(GOOD_CAPTURE)
         data["mlperf_sysinfo"]["complete"] = False
         assert not summarise(write_capture(tmp_path, data)).complete
+
+
+class TestWhyTextReadsInBothCommands:
+    """A profile's `why` is printed by two commands with different labels.
+
+    `check` labels the line with the *config path*, so
+    "submission.notes.hardware -- Becomes hw_notes on every node type" reads
+    fine. `validate` labels it with the *output key*, which turned the same
+    text into "hw_notes on every node type is empty -- Becomes hw_notes on
+    every node type". The rule that keeps both readable: a why says why the
+    field matters, never where it goes -- the label is already the destination.
+    """
+
+    @staticmethod
+    def _entries():
+        from mlperf_sysinfo import profiles
+        from mlperf_sysinfo.output import output_key_for
+
+        for name in profiles.available():
+            profile = profiles.load(name)
+            for items in (profile.requires, profile.recommends):
+                for config_path, why in items.items():
+                    key = output_key_for(config_path, profile)
+                    if key is not None:
+                        yield name, config_path, key, why
+
+    def test_no_why_names_the_output_key_it_is_attached_to(self):
+        import re
+
+        from mlperf_sysinfo.report import _label
+
+        for name, config_path, key, why in self._entries():
+            bare = key.rsplit(".", 1)[-1]
+            tokens = set(re.split(r"[^a-z0-9_]+", why.lower()))
+            assert bare not in tokens, (
+                f"{name}: {config_path}'s why names its own output key {bare!r}, so "
+                f"validate would print '{_label(key)} is empty -- {why}'"
+            )
+
+    def test_no_why_contains_the_separator_validate_puts_in_front_of_it(self):
+        """'endpoint_url is empty -- The endpoint under test -- written to ...'
+        put two of them on one line."""
+        for name, config_path, _key, why in self._entries():
+            assert "--" not in why, f"{name}: {config_path}'s why contains '--'"
+
+    def test_every_why_is_a_sentence_not_a_field_name(self):
+        for name, config_path, _key, why in self._entries():
+            assert len(why.split()) >= 3, f"{name}: {config_path}'s why is too terse: {why!r}"
+            assert why[0].isupper(), f"{name}: {config_path}'s why should read as prose: {why!r}"

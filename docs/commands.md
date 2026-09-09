@@ -107,7 +107,7 @@ STILL STARTER TEXT
 
 WORTH FILLING IN
   ! serving.node                 empty         Enables parallelism and batch settings to be read from the startup log
-  ! submission.notes.software    empty         Becomes sw_notes on every node type
+  ! submission.notes.software    empty         Software detail no probe can report, such as versions, flags or patches
   ! run.link_config              empty         Reviewers use it to reproduce the run
 
 [2026-08-19 21:39:59] ERROR    check: 4 problems
@@ -273,7 +273,7 @@ $ mlperf-sysinfo validate broken.json
 
 PROBLEMS
   ✗ partial capture: 1 of 2 nodes answered. This file does not describe the whole system.
-  ✗ endpoint_url is empty -- The endpoint under test, written to the submission as endpoint_url
+  ✗ endpoint_url is empty -- The endpoint under test
   ✗ node_types[0].cooling still holds placeholder text: 'CHANGEME'
 
 [2026-08-19 21:42:30] ERROR    report: 3 problem(s) -- this file is not ready to submit
@@ -291,8 +291,7 @@ rules.
 $ mlperf-sysinfo profiles
 
   endpoints    MLPerf Endpoints
-    Inference-serving endpoints. Writes the rules 8.2 field set, keeping
-    node_types so heterogeneous and disaggregated systems stay legible.
+    Inference-serving endpoints. Writes the rules 8.2 field set.
     5 required field(s), writes nested system_desc.json
 
   inference    MLPerf Inference
@@ -338,7 +337,7 @@ error  "-v" is not a command or a top-level flag. Did you mean "--version"?
 asked which you wanted.
 
 Misspelled config options get the same treatment — see
-[Configuration](configuration.md#misspelled-options).
+[The config file](configuration/index.md#unknown-and-misspelled-options).
 
 ## Logging
 

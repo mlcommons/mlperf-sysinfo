@@ -22,6 +22,7 @@ from typing import Any
 
 from . import logs
 from .config import SysinfoConfig
+from .errors import CaptureError
 from .profiles import Profile
 
 log = logs.get(__name__)
@@ -361,6 +362,202 @@ def build_flat(collected: dict, config: SysinfoConfig, profile: Profile) -> dict
 
 
 # ---------------------------------------------------------------------------
+# the training field set (mlperf_logging/system_desc_checker)
+# ---------------------------------------------------------------------------
+#
+# Training is validated by a different checker from Inference --
+# mlperf_logging/system_desc_checker in mlcommons/logging, not the Inference
+# submission_checker -- so this field set is derived from that checker's
+# required_fields list rather than by analogy to the flat inference one. The
+# two drift independently; verify a change against the checker, not against
+# _FLAT_KEYS.
+
+#: The four values ``status`` may hold. The checker rejects anything else for
+#: ruleset major version 4 and above (``availability_options`` in
+#: system_desc_checker.py), so a wrong one fails at submission time rather
+#: than here -- which is why check refuses it up front instead.
+TRAINING_STATUS_OPTIONS = (
+    "Available on-premise",
+    "Available cloud",
+    "Research, Development, or Internal (RDI)",
+    "Preview",
+)
+
+#: Lower-cased shorthands accepted on top of the canonical spellings, so a
+#: submitter need not copy the exact punctuation of "Research, Development, or
+#: Internal (RDI)".
+#:
+#: Bare "available" is deliberately absent. It is what MLPerf Inference uses,
+#: but training splits availability into on-premise and cloud, and guessing
+#: which one a submitter meant would silently mislabel the submission.
+_TRAINING_STATUS_ALIASES = {
+    "on-premise": "Available on-premise",
+    "on-prem": "Available on-premise",
+    "onprem": "Available on-premise",
+    "on premise": "Available on-premise",
+    "available on-prem": "Available on-premise",
+    "available onprem": "Available on-premise",
+    "cloud": "Available cloud",
+    "rdi": "Research, Development, or Internal (RDI)",
+    "research, development, or internal": "Research, Development, or Internal (RDI)",
+    "internal": "Research, Development, or Internal (RDI)",
+    "preview": "Preview",
+}
+
+
+def normalize_training_status(value: Any) -> tuple[str, str | None]:
+    """Map ``system.availability`` onto one of ``TRAINING_STATUS_OPTIONS``.
+
+    Returns ``(value, None)`` when it maps, or ``("", reason)`` when it does
+    not. An empty input maps to an empty string with no complaint: that is a
+    missing required field, which the profile's ``requires`` already reports,
+    and saying it twice in different words helps nobody.
+    """
+    raw = "" if value is None else str(value).strip()
+    if not raw:
+        return "", None
+
+    lowered = raw.lower()
+    for option in TRAINING_STATUS_OPTIONS:
+        if lowered == option.lower():
+            return option, None
+    if lowered in _TRAINING_STATUS_ALIASES:
+        return _TRAINING_STATUS_ALIASES[lowered], None
+
+    hint = ""
+    if lowered in ("available", "avail"):
+        hint = (
+            " MLPerf Training splits availability into on-premise and cloud, "
+            "so 'available' on its own is ambiguous -- pick one."
+        )
+    return "", (
+        f"{raw!r} is not a valid MLPerf Training availability. It must be one "
+        f"of: {', '.join(TRAINING_STATUS_OPTIONS)}.{hint}"
+    )
+
+
+#: Every field the training checker requires, in the order it lists them, plus
+#: ``framework_name`` where submissions that carry it put it. The checker only
+#: tests for presence, but keeping the published order makes a generated file
+#: diffable against the ones already in the training_results repos.
+TRAINING_FIELDS = (
+    "submitter",
+    "division",
+    "status",
+    "system_name",
+    "number_of_nodes",
+    "host_processors_per_node",
+    "host_processor_model_name",
+    "host_processor_core_count",
+    "host_processor_vcpu_count",
+    "host_processor_frequency",
+    "host_processor_caches",
+    "host_processor_interconnect",
+    "host_memory_capacity",
+    "host_storage_type",
+    "host_storage_capacity",
+    "host_networking",
+    "host_networking_topology",
+    "host_memory_configuration",
+    "accelerators_per_node",
+    "accelerator_model_name",
+    "accelerator_host_interconnect",
+    "accelerator_frequency",
+    "accelerator_on-chip_memories",
+    "accelerator_memory_configuration",
+    "accelerator_memory_capacity",
+    "accelerator_interconnect",
+    "accelerator_interconnect_topology",
+    "cooling",
+    "hw_notes",
+    "framework",
+    "framework_name",
+    "other_software_stack",
+    "operating_system",
+    "sw_notes",
+)
+
+#: Written only when the config sets it. The checker does not ask for it and
+#: existing submissions disagree about whether to carry it, so an empty one is
+#: noise rather than a blank to fill in.
+_TRAINING_OPTIONAL_FIELDS = frozenset({"framework_name"})
+
+
+def _training_value(value: Any) -> str:
+    """Coerce one field to the string form training submissions use.
+
+    Every value in a training system description is a string, counts included
+    ("8", not 8). A detection-failure marker becomes an empty string, which is
+    how existing submissions express "not disclosed" -- carrying "Not
+    detected: ..." into a submission field would read as a real answer.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        stripped = value.strip()
+        return "" if is_not_detected(stripped) else stripped
+    return str(value)
+
+
+def _training_overlay(config: SysinfoConfig) -> dict:
+    """Values the config owns, not a probe.
+
+    ``status`` is normalized here as well as refused by ``check``: a caller
+    using the library directly never runs the check, and a file that fails the
+    training checker on its first field is not worth writing.
+    """
+    sub = config.submission
+    status, _ = normalize_training_status(config.system.availability)
+    return {
+        "submitter": _s(sub.submitter),
+        "division": _s(sub.division).lower(),
+        "status": status,
+        "system_name": config.system.name,
+        "host_networking_topology": _s(config.system.networking_topology),
+        "cooling": _s(config.system.cooling),
+        "hw_notes": _s(sub.notes.hardware),
+        "sw_notes": _s(sub.notes.software),
+        "framework": _s(config.training.framework),
+        "framework_name": _s(config.training.framework_name),
+    }
+
+
+def build_training(collected: dict, config: SysinfoConfig) -> dict:
+    """The training system description: the checker's fields, in its order.
+
+    Unlike ``build_flat`` this does not pass the automation's document through
+    untouched. The training field set is closed -- it is exactly what the
+    checker lists -- so an inference-shaped extra like ``submitter_contact``
+    or ``system_type`` reaching the file would be a field no training reviewer
+    has a column for.
+    """
+    if "node_types" in collected:
+        raise CaptureError(
+            "the collection layer returned the nested field set, not the flat "
+            "training one. mlc-scripts was asked for '_training' and did not "
+            "supply it -- the installed release is too old. Every hardware "
+            "field would have been written empty, so nothing was written."
+        )
+
+    overlay = _training_overlay(config)
+    if not overlay["framework"]:
+        # Not fatal here -- the profile requires it, so check has already
+        # refused this config unless a library caller skipped the check.
+        log.warning(
+            "training.framework is not set. MLPerf Training expects the "
+            "framework and version there (e.g. \"NVIDIA PyTorch Release "
+            "25.04\"); writing it empty."
+        )
+    out: dict[str, Any] = {}
+    for field in TRAINING_FIELDS:
+        value = overlay[field] if field in overlay else _training_value(collected.get(field))
+        if not value and field in _TRAINING_OPTIONAL_FIELDS:
+            continue
+        out[field] = value
+    return out
+
+
+# ---------------------------------------------------------------------------
 # config path -> output key, so a captured file can be validated on its own
 # ---------------------------------------------------------------------------
 
@@ -401,9 +598,37 @@ _FLAT_KEYS = {
 }
 
 
-def output_key_for(config_path: str, shape_name: str) -> str | None:
-    """Which output field a required config path lands in, if any."""
-    table = _NESTED_KEYS if shape_name == "nested" else _FLAT_KEYS
+#: Training is flat like inference but not the same field set: it has no
+#: system_type, no submitter_contact and no system_type_detail, and it adds
+#: two fields of its own. Sharing _FLAT_KEYS would make ``validate`` look for
+#: fields that are not in the file and miss the ones that are.
+_TRAINING_KEYS = {
+    "system.name": "system_name",
+    "system.availability": "status",
+    "system.cooling": "cooling",
+    "system.networking_topology": "host_networking_topology",
+    "submission.submitter": "submitter",
+    "submission.division": "division",
+    "submission.notes.hardware": "hw_notes",
+    "submission.notes.software": "sw_notes",
+    "training.framework": "framework",
+    "training.framework_name": "framework_name",
+}
+
+
+def output_key_for(config_path: str, profile: Profile) -> str | None:
+    """Which output field a required config path lands in, if any.
+
+    Keyed off the profile's ``benchmark`` rather than its ``shape``: training
+    and inference are both flat documents with different field sets, so shape
+    alone no longer identifies one.
+    """
+    if profile.benchmark == "training":
+        table = _TRAINING_KEYS
+    elif profile.shape == "nested":
+        table = _NESTED_KEYS
+    else:
+        table = _FLAT_KEYS
     return table.get(config_path)
 
 
@@ -422,16 +647,25 @@ def provenance(
     package_version: str,
 ) -> dict:
     """The block that makes an output file self-describing."""
-    block: dict[str, Any] = {
-        "version": package_version,
-        "profile": profile.name,
-        "profile_round": profile.round,
-        "shape": profile.shape,
-        "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "nodes_expected": nodes_expected,
-        "nodes_collected": nodes_collected,
-        "complete": not partial,
-    }
+    block: dict[str, Any] = {"version": package_version, "profile": profile.name}
+    # Omitted rather than written empty when a profile does not name a round.
+    # "profile_round": "" would read as a round that failed to record, which is
+    # a different thing from a profile that deliberately does not track one.
+    if profile.round:
+        block["profile_round"] = profile.round
+    block.update(
+        {
+            "shape": profile.shape,
+            # Which field set this file holds. shape alone stopped being enough
+            # to say once training and inference were both flat documents, and
+            # a reader with only the file has to be able to tell them apart.
+            "benchmark": profile.benchmark,
+            "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "nodes_expected": nodes_expected,
+            "nodes_collected": nodes_collected,
+            "complete": not partial,
+        }
+    )
     if partial:
         block["warning"] = (
             "PARTIAL CAPTURE -- one or more nodes did not answer. "
@@ -503,7 +737,9 @@ def shape(
     package_version: str,
 ) -> dict:
     """Apply the profile's shape and stamp provenance."""
-    if profile.shape == "nested":
+    if profile.benchmark == "training":
+        result = build_training(collected, config)
+    elif profile.shape == "nested":
         result = build_endpoints(collected, config)
     else:
         result = build_flat(collected, config, profile)

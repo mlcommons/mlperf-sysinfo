@@ -28,6 +28,11 @@ dependencies = [
   "pydantic>=2.7",
   "PyYAML>=6.0",
   "cyclopts>=3.0",
+  # 1.2.0a2 has _endpoints and _inference but NOT _training: that variation is
+  # mlperf-automations#1101, still open. Until a release carries it, the
+  # training profile cannot collect -- build_training refuses the endpoints
+  # field set rather than writing a file of empty hardware. Bump this pin in
+  # the same change that marks training ready.
   "mlc-scripts==1.2.0a2",
 ]
 

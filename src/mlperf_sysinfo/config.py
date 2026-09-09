@@ -208,6 +208,14 @@ class SystemConfig(BaseModel):
     accelerator: Literal["cuda", "rocm", "xpu", "none"] = "none"
     cooling: str | None = None
     type_detail: str | None = None
+    networking_topology: str | None = Field(
+        default=None,
+        description=(
+            "How the nodes are wired to each other, e.g. 'rail-optimized fat "
+            "tree'. Written as host_networking_topology. No probe can see past "
+            "the local NIC, so this is the submitter's answer or nothing."
+        ),
+    )
     size: str | None = Field(
         default=None, description="Override the computed system size. Rarely needed."
     )
@@ -299,6 +307,35 @@ class ServingConfig(BaseModel):
         return v
 
 
+class TrainingConfig(BaseModel):
+    """The training stack.
+
+    Separate from ``serving`` on purpose: ``serving.framework`` names a log
+    parser to run against a running server, while these two are free text
+    describing the stack a training run was performed with. Nothing probes
+    them -- the framework version lives inside a container image the tool
+    never sees.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    framework: str | None = Field(
+        default=None,
+        description=(
+            "Training framework and version, e.g. 'NVIDIA PyTorch Release "
+            "25.04'. Written as framework."
+        ),
+    )
+    framework_name: str | None = Field(
+        default=None,
+        description=(
+            "Short tag for the framework build, e.g. 'ngc25.04_pytorch'. "
+            "Optional: written only when set, since the checker does not ask "
+            "for it and existing submissions disagree about whether to carry it."
+        ),
+    )
+
+
 class RedfishConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -326,12 +363,11 @@ class NotesInfo(BaseModel):
 class SubmissionConfig(BaseModel):
     """The paperwork.
 
-    Model and dataset details used to live here. For Endpoints they moved to
-    the measurement point config (``points/<point>/config.yml``, endpoints
-    rules 8.3), which this tool does not write -- see ``MIGRATED_PATHS``.
-    ``submitter``/``contact`` are still part of an MLPerf Inference system
-    description, so they stay in the schema; the endpoints profile no longer
-    asks for them.
+    Model and dataset details are not here. For Endpoints they are measurement
+    point metadata (``points/<point>/config.yml``, endpoints rules 8.3), which
+    this tool does not write. ``submitter``/``contact`` are still part of an
+    MLPerf Inference system description, so they stay in the schema; the
+    endpoints profile no longer asks for them.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -388,6 +424,7 @@ class SysinfoConfig(BaseModel):
     system: SystemConfig
     nodes: NodesConfig = Field(default_factory=NodesConfig)
     serving: ServingConfig = Field(default_factory=ServingConfig)
+    training: TrainingConfig = Field(default_factory=TrainingConfig)
     power: PowerConfig = Field(default_factory=PowerConfig)
     submission: SubmissionConfig = Field(default_factory=SubmissionConfig)
     run: RunConfig = Field(default_factory=RunConfig)
@@ -583,28 +620,6 @@ def load_config(path: str | Path) -> SysinfoConfig:
     return config
 
 
-#: Options this tool used to accept and no longer does, mapped to where the
-#: answer now belongs. A config written for an earlier round still parses far
-#: enough to reach here, so saying "unknown option" would be actively
-#: misleading -- the submitter did not misspell anything, the field moved.
-#:
-#: For Endpoints, model and dataset details are now measurement-point
-#: metadata (endpoints rules 8.3, ``points/<point>/config.yml``) rather than
-#: system description metadata, and this tool does not write that file.
-_POINT_CONFIG = (
-    "moved to the measurement point config (points/<point>/config.yml, "
-    "endpoints rules 8.3), which mlperf-sysinfo does not write -- delete it here"
-)
-
-MIGRATED_PATHS: dict[str, str] = {
-    "submission.model": _POINT_CONFIG,
-    "submission.dataset": _POINT_CONFIG,
-    "submission.measured_accuracy_score": (
-        "no longer part of the system description -- delete it here"
-    ),
-}
-
-
 def _format_validation_error(path: Path, error: ValidationError) -> str:
     """Turn pydantic's output into something a person can act on."""
     lines = [f"{path}: config is not valid"]
@@ -613,14 +628,10 @@ def _format_validation_error(path: Path, error: ValidationError) -> str:
         loc = ".".join(str(p) for p in loc_parts) or "(root)"
         msg = err["msg"]
         if err["type"] == "extra_forbidden":
-            migrated = MIGRATED_PATHS.get(loc)
-            if migrated:
-                msg = migrated
-            else:
-                typed = str(loc_parts[-1]) if loc_parts else ""
-                hint = did_you_mean(typed, options_at(SysinfoConfig, loc_parts))
-                msg = f"unknown option.{hint}" if hint else (
-                    "unknown option -- check the spelling, or see 'mlperf-sysinfo init'"
-                )
+            typed = str(loc_parts[-1]) if loc_parts else ""
+            hint = did_you_mean(typed, options_at(SysinfoConfig, loc_parts))
+            msg = f"unknown option.{hint}" if hint else (
+                "unknown option -- check the spelling, or see 'mlperf-sysinfo init'"
+            )
         lines.append(f"  {loc}: {msg}")
     return "\n".join(lines)

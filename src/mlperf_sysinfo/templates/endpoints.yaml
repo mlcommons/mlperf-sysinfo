@@ -6,10 +6,6 @@
 # Anything the tool can detect for itself -- CPU, memory, accelerators, node
 # counts, framework version, parallelism and batch size -- is deliberately
 # absent below. Only what cannot be detected belongs in this file.
-#
-# Model, dataset and concurrency details are NOT here any more. They are
-# measurement point metadata (endpoints rules 8.3) and belong in each point's
-# points/<point>/config.yml, which this tool does not write.
 
 profile: endpoints
 

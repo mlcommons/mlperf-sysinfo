@@ -7,8 +7,8 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
-  icon:
-    logo: material/server-network
+  logo: img/logo_v2.svg
+  favicon: img/logo_v2.svg
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -27,7 +27,11 @@ theme:
   features:
     - navigation.instant
     - navigation.tracking
-    - navigation.sections
+    # No navigation.sections: it renders a nested group as a flat label with its
+    # children flush against the top-level pages, so "endpoints" and "inference"
+    # read as siblings of "Home" rather than as parts of the config file.
+    - navigation.indexes
+    - navigation.expand
     - navigation.top
     - content.code.copy
     - content.code.annotate
@@ -36,11 +40,17 @@ theme:
 nav:
   - Home: index.md
   - Architecture: architecture.md
-  - The config file: configuration.md
+  - Config File:
+      - configuration/index.md
+      - Endpoints: configuration/endpoints.md
+      - Inference: configuration/inference.md
+      - Training: configuration/training.md
   - Commands: commands.md
   - Sample outputs: outputs.md
-  - Profiles: profiles.md
   - Embedding it: embedding.md
+
+validation:
+  anchors: warn
 
 markdown_extensions:
   - admonition
@@ -54,7 +64,13 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  # base_path is resolved against the *config file*, not the working directory,
+  # and check_paths turns a missing include into a build error. Without both, a
+  # build started from another directory silently rendered the two template
+  # blocks as empty -- and --strict said nothing.
+  - pymdownx.snippets:
+      base_path: [!relative $config_dir]
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid

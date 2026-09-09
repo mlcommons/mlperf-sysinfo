@@ -134,15 +134,13 @@ class TestConfigOptions:
         with pytest.raises(ConfigError, match="check the spelling"):
             load_config(write_yaml(tmp_path / "c.yaml", data))
 
-    def test_a_migrated_option_keeps_its_own_message(self, tmp_path):
-        """'model' is a real former option, not a typo -- where it went is more
-        useful than the nearest surviving name."""
+    def test_a_removed_option_is_just_an_unknown_option(self, tmp_path):
+        """'model' used to be a real option. It gets no special message: one
+        more vocabulary to keep in step with the rules was not worth it."""
         data = copy.deepcopy(GOOD_CONFIG)
         data["submission"]["model"] = {"name": "x"}
-        with pytest.raises(ConfigError) as e:
+        with pytest.raises(ConfigError, match="unknown option"):
             load_config(write_yaml(tmp_path / "c.yaml", data))
-        assert "measurement point config" in str(e.value)
-        assert "Did you mean" not in str(e.value)
 
 
 class TestOptionsAt:

@@ -32,9 +32,13 @@ about what a working group must supply is policy, and lives here instead.
 The automation assembles a *different field set per benchmark*, so the
 profile's `benchmark` names which one to ask for — `_endpoints` keeps only the
 fields in endpoints rules 8.2, `_inference` keeps what the Inference
-submission checker wants, and the two are not interchangeable. Sending no
-variation silently gets the endpoints field set, which is how a `profile:
-inference` capture once shipped with no accelerator in it. What comes back is
+submission checker wants, `_training` keeps what
+`mlperf_logging/system_desc_checker` wants, and none of them are
+interchangeable. Sending no variation silently gets the endpoints field set,
+which is how a `profile: inference` capture once shipped with no accelerator
+in it. `build_training` refuses a document that still has `node_types` for
+exactly this reason: an mlc-scripts without `_training` returns the endpoints
+set, and shaping it would write every hardware field empty. What comes back is
 the probed truth about the hardware; `output.py` puts it in the published
 template's order and writes every config-supplied value over whatever the
 automation defaulted, because those defaults are placeholder strings
@@ -71,8 +75,6 @@ profile and no collection change.
 - Model, dataset and concurrency details are **not** config fields. For
   Endpoints they are measurement point metadata (rules 8.3,
   `points/<point>/config.yml`), which this tool does not write.
-  `config.MIGRATED_PATHS` maps the removed options to a message saying where
-  they went, so an old config gets that instead of "unknown option".
 - An unrecognised option, profile name or leading flag is matched against the
   real names by `suggest.py`, which ignores case and treats `-`/`_` alike and
   accepts a prefix (so `-v` reaches `--version` and `sshkey` reaches
@@ -88,13 +90,32 @@ profile and no collection change.
   `requires` (dotted path → why; absence is a hard stop), `recommends`
   (absence is a warning), `collect` flags (which optional steps run), and
   `shape` (`nested` keeps `node_types` for heterogeneous/disaggregated
-  systems; `flat` lifts hardware to the top level for the MLPerf Inference
-  submission checker), and `benchmark` (which field set to collect). Profiles
+  systems; `flat` lifts hardware to the top level), and `benchmark` (which
+  field set to collect). `shape` alone stopped identifying a field set once
+  `inference` and `training` were both flat, so `output_key_for` and
+  `output.shape` dispatch on `benchmark` and the provenance block stamps it.
+  Profiles
   always track the *current* MLPerf round — there is no pinning, so a profile
   change applies to everyone on the next release, which is why profile changes
   get careful review. `round` is stamped into the output file but never printed
   to the terminal: with nothing to choose, showing it on every line is noise
-  that also implies there is a choice.
+  that also implies there is a choice. `round` is optional — `training` sets
+  none, because MLPerf Training numbers its rulesets independently, and
+  `profile_round` is then omitted rather than written empty.
+
+### Three checkers, not one
+
+`inference` and `training` are both flat and are validated by *different*
+checkers — the Inference `submission_checker` and
+`mlperf_logging/system_desc_checker` in mlcommons/logging. They drift
+independently, so verify a training change against that checker rather than by
+analogy to `_FLAT_KEYS`. Training's own rules, all of which have bitten:
+every value is a string (`"8"`, not `8`); a detection-failure marker becomes
+`""`, since "Not detected: ..." in a submission field reads as a real answer;
+`status` takes exactly four strings, and bare `available` is refused rather
+than guessed at because training splits it into on-premise and cloud; and the
+field set is *closed*, so `build_training` composes the document rather than
+passing the automation's through the way `build_flat` does.
 
 ### Logging
 

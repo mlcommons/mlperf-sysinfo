@@ -234,32 +234,27 @@ class TestEmbedding:
         assert cfg.output_dir == (tmp_path / "out").resolve()
 
 
-class TestMigratedOptions:
-    """An option that moved should say where it went, not "check the spelling"."""
+class TestRemovedOptions:
+    """Options this tool used to accept are rejected as unknown, like any
+    other name it does not have. There is no per-option migration message:
+    it was a second vocabulary to keep in step with the rules, and the
+    schema already says what the valid names are."""
 
-    @pytest.mark.parametrize("section", ["model", "dataset"])
-    def test_model_and_dataset_point_at_the_measurement_point_config(
-        self, tmp_path, section
-    ):
+    @pytest.mark.parametrize(
+        "section", ["model", "dataset", "measured_accuracy_score"]
+    )
+    def test_a_former_option_is_rejected(self, tmp_path, section):
         data = copy.deepcopy(GOOD_CONFIG)
         data["submission"][section] = {"name": "something"}
-        with pytest.raises(ConfigError, match="measurement point config") as e:
-            load_config(write_yaml(tmp_path / "c.yaml", data))
-        assert "check the spelling" not in str(e.value)
-
-    def test_measured_accuracy_score_is_gone(self, tmp_path):
-        data = copy.deepcopy(GOOD_CONFIG)
-        data["submission"]["measured_accuracy_score"] = 0.9
-        with pytest.raises(ConfigError, match="no longer part of the system description"):
+        with pytest.raises(ConfigError, match="unknown option"):
             load_config(write_yaml(tmp_path / "c.yaml", data))
 
-    def test_a_genuine_typo_gets_a_suggestion_not_the_migration_message(self, tmp_path):
+    def test_a_genuine_typo_still_gets_a_suggestion(self, tmp_path):
         data = copy.deepcopy(GOOD_CONFIG)
         data["submission"]["submiter"] = "MyOrg"
         with pytest.raises(ConfigError) as e:
             load_config(write_yaml(tmp_path / "c.yaml", data))
         assert 'Did you mean "submitter"?' in str(e.value)
-        assert "measurement point" not in str(e.value)
 
 
 class TestEmptySections:

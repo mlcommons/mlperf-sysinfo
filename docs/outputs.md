@@ -3,8 +3,8 @@
 Every file on this page is a real capture from an 8×H100 node, trimmed only
 where noted. Nothing here is invented.
 
-The profile decides the shape. Both were produced from the same machine and
-almost the same config — only `profile:` differed.
+The profile decides the shape. All three were produced from the same machine
+and almost the same config — only `profile:` differed.
 
 ## Provenance: the block every output carries
 
@@ -14,6 +14,7 @@ almost the same config — only `profile:` differed.
   "profile": "endpoints",
   "profile_round": "6.0",
   "shape": "nested",
+  "benchmark": "endpoints",
   "captured_at": "2026-08-10T14:01:20+00:00",
   "nodes_expected": 1,
   "nodes_collected": 1,
@@ -36,7 +37,8 @@ This is what makes a captured file self-describing:
 
 | Field | Why it matters |
 | --- | --- |
-| `profile` + `profile_round` | Which rules produced this file. Profiles track the current round, so the file records which round that was |
+| `profile` + `profile_round` | Which rules produced this file. Profiles track the current round, so the file records which round that was. A profile that names no round omits `profile_round` rather than writing it empty — see [`training`](#training-flat) |
+| `benchmark` | Which field set the file holds. `shape` alone stopped being enough to say once `inference` and `training` were both flat |
 | `nodes_expected` / `nodes_collected` | What was asked for versus what answered |
 | `complete` | `false` means a partial capture. `validate` refuses these |
 | `mlc_scripts` | Which collection code produced the file |
@@ -233,6 +235,75 @@ and drops everything outside rules 8.2.
 When a flat capture covers several node types, values are merged: identical
 hardware collapses to one value, and genuinely different hardware is
 comma-joined so nothing is silently dropped.
+
+---
+
+## `training` — flat
+
+The field set
+[`mlperf_logging/system_desc_checker`](https://github.com/mlcommons/logging/tree/master/mlperf_logging/system_desc_checker)
+validates, in the order that checker lists its `required_fields`. Flat like
+`inference`, but **not the same field set and not the same checker** — see
+[What is different from `inference`](configuration/training.md#what-is-different-from-inference).
+
+The file is named after `system.name`, because a training submission stores it
+as `<submitter>/systems/<system_name>.json`.
+
+```json
+{
+  "submitter": "MyOrg",
+  "division": "closed",
+  "status": "Available on-premise",
+  "system_name": "dgx-h100-n8",
+  "number_of_nodes": "8",
+  "host_processors_per_node": "2",
+  "host_processor_model_name": "Intel(R) Xeon(R) Platinum 8480+",
+  "host_processor_core_count": "112",
+  "host_processor_vcpu_count": "224",
+  "host_processor_frequency": "3.80 GHz",
+  "host_processor_caches": "L1d: 5.3 MiB (112 instances); L2: 224 MiB (112 instances); L3: 210 MiB (2 instances)",
+  "host_processor_interconnect": "UPI (2 NUMA nodes)",
+  "host_memory_capacity": "2.2T",
+  "host_storage_type": "NVMe SSD",
+  "host_storage_capacity": "1.1 GB NVMe SSD, 1.8 TB SSD",
+  "host_networking": "mlx5_0: native InfiniBand",
+  "host_networking_topology": "rail-optimized fat tree, 8x400G per node",
+  "host_memory_configuration": "",
+  "accelerators_per_node": "8",
+  "accelerator_model_name": "NVIDIA H100 80GB HBM3",
+  "accelerator_host_interconnect": "PCIe Gen5 x16",
+  "accelerator_frequency": "1980.000000 MHz",
+  "accelerator_on-chip_memories": "Shared Memory: 48 KB/block",
+  "accelerator_memory_configuration": "80 GiB HBM3",
+  "accelerator_memory_capacity": "80GiB",
+  "accelerator_interconnect": "NVLink",
+  "accelerator_interconnect_topology": "Mesh",
+  "cooling": "air",
+  "hw_notes": "8-node DGX H100 SuperPOD",
+  "framework": "NVIDIA PyTorch Release 25.04",
+  "framework_name": "ngc25.04_pytorch",
+  "other_software_stack": "CUDA 12.9, Driver 575.57.08",
+  "operating_system": "ubuntu 24.04",
+  "sw_notes": "NCCL 2.21, CUDA 12.4",
+  "mlperf_sysinfo": { "...": "as above, without profile_round" }
+}
+```
+
+Three things about this file are not true of the flat `inference` one:
+
+**Every value is a string.** Counts included — `"8"`, not `8`. That is the form
+existing training submissions use.
+
+**A failed probe becomes empty, not prose.** `host_memory_configuration` above
+came back as `Not detected: dmidecode requires sudo`, and carrying that into a
+submission field would read as a real answer. Empty is how a training
+submission says "not disclosed"; `validate` still lists it as a field to fill
+in before submitting.
+
+**No `profile_round` is stamped.** MLPerf Training numbers its rulesets
+independently of Inference, so the profile records no round rather than one
+that might be wrong. The field is omitted rather than written empty — an empty
+one would read as a round that failed to record.
 
 ---
 
