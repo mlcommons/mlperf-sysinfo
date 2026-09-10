@@ -14,7 +14,7 @@ output:
 
 system:
   name: CHANGEME                 # e.g. H100x8_vLLM
-  category: datacenter           # datacenter | edge
+  shortened_name: CHANGEME       # at most 20 characters, e.g. H100x8
   availability: available        # available | preview | rdi
   accelerator: cuda              # cuda | rocm | xpu | none
   cooling: air                   # air | liquid | passive
@@ -59,11 +59,3 @@ run:
   # node_config: "prefill: 2x H100; decode: 6x H100"   # defaults to a summary of nodes.groups
   # config_summary_notes: ""     # anything the parallelism fields do not capture
   # link_config: https://github.com/myorg/submission/tree/main/configs
-
-# Optional BMC power capture. Credentials are read from the environment --
-# never write them into this file.
-# power:
-#   redfish:
-#     endpoint: https://bmc.node1
-#     username: ${BMC_USER}
-#     password: ${BMC_PASSWORD}

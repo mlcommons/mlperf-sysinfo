@@ -10,10 +10,15 @@ output_file: system_desc.json
 shape: nested
 benchmark: endpoints
 
+# redfish is off until the working group decides whether power belongs in an
+# endpoints submission. The config still parses a power section -- inference
+# and training collect it -- but for endpoints it is neither collected nor
+# advertised, so nobody fills one in on the strength of a rule that does not
+# exist yet.
 collect:
   serving_log: true
   endpoint_probe: true
-  redfish: true
+  redfish: false
 
 # Model, dataset and concurrency details are no longer system description
 # metadata: they belong to the measurement point (rules 8.3,
@@ -21,7 +26,7 @@ collect:
 # should ask for them.
 requires:
   system.name: Identifier for the system under test
-  system.category: Whether this is a datacenter or an edge system
+  system.shortened_name: Short form of the name, at most 20 characters
   system.availability: Availability at submission time, e.g. available, preview or rdi
   submission.division: One of standardized, serviced or rdi
   serving.url: The endpoint under test

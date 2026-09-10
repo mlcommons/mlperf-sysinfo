@@ -51,7 +51,7 @@ output:
 
 system:
   name: devbox1
-  category: datacenter
+  shortened_name: devbox1
   availability: available
   accelerator: none
 
@@ -167,7 +167,7 @@ output:
 
 system:
   name: H100x8_vLLM
-  category: datacenter
+  shortened_name: H100x8
   availability: available
   accelerator: cuda
 

@@ -51,7 +51,7 @@ output:
 
 system:
   name: devbox1
-  category: datacenter
+  shortened_name: devbox1
   availability: available
   accelerator: none
 

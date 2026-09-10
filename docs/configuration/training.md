@@ -208,7 +208,6 @@ They are not, and they are validated by different checkers.
 | Output filename | `system_desc.json` | `<system_name>.json` |
 | Availability | `available`, `preview`, `rdi` — written as `status` | [Four long strings](#systemavailability-four-values-and-no-others) — written as `status` |
 | Framework | `serving_framework`, probed | `framework`, from `training.framework` |
-| `system.category` | **Required**, written as `system_type` | Not in the field set |
 | `submission.contact` | **Required**, written as `submitter_contact` | Not in the field set |
 | Networking topology | Optional | **Required** |
 | Cooling | Optional | **Required** |

@@ -14,6 +14,7 @@ GOOD_CONFIG = {
     "output": {"dir": "out"},
     "system": {
         "name": "H100x8_vLLM",
+        "shortened_name": "H100x8",
         "category": "datacenter",
         "availability": "available",
         "accelerator": "cuda",
@@ -53,6 +54,7 @@ def collected() -> dict:
     return {
         "division": "Insert model division here",
         "system_name": "H100x8_vLLM",
+        "shortened_system_name": "Insert shortened system name here",
         "system_availability_status": "Insert system availability status here",
         "system_category": "Insert system category here",
         "system_size": "16x NVIDIA H100 80GB HBM3",

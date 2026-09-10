@@ -219,7 +219,7 @@ class Summary:
 #: (endpoints rules 8.3) and are not in this file to show.
 _SUPPLIED_NESTED = [
     ("division", "division"),
-    ("category", "system_category"),
+    ("short name", "shortened_system_name"),
     ("availability", "system_availability_status"),
     ("endpoint", "endpoint_url"),
     ("node config", "node_config"),

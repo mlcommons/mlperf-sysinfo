@@ -201,6 +201,15 @@ class SystemConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(description="Identifier for the system under test, e.g. 'H100x8_vLLM'.")
+    shortened_name: str | None = Field(
+        default=None,
+        description=(
+            "Short form of the name for tables and charts, at most 20 "
+            "characters. Written as shortened_system_name. Not derived from "
+            "system.name: an abbreviation a reader will recognise is a "
+            "judgement call, and a truncated one reads as a typo."
+        ),
+    )
     category: str | None = Field(default=None, description="e.g. datacenter, edge.")
     availability: str | None = Field(
         default=None, description="e.g. available, preview, rdi."

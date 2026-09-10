@@ -15,8 +15,8 @@ from mlperf_sysinfo.report import summarise, validate
 GOOD_CAPTURE = {
     "division": "standardized",
     "system_name": "H100x8_vLLM",
+    "shortened_system_name": "H100x8",
     "system_availability_status": "available",
-    "system_category": "datacenter",
     "system_size": "16x NVIDIA H100",
     "system_node_ensemble_count": 1,
     "system_node_ensemble_total": 2,
@@ -81,7 +81,7 @@ class TestValidate:
 
     def test_placeholder_text_is_caught(self, tmp_path):
         data = copy.deepcopy(GOOD_CAPTURE)
-        data["system_category"] = "Insert system category here"
+        data["system_availability_status"] = "Insert system availability status here"
         report = validate(write_capture(tmp_path, data))
         assert not report.ok
         assert any("placeholder" in p for p in report.problems)

@@ -17,6 +17,7 @@ from mlperf_sysinfo.errors import ProfileError
 from mlperf_sysinfo.output import (
     ENDPOINTS_ACCELERATOR_FIELDS,
     ENDPOINTS_NODE_FIELDS,
+    ENDPOINTS_OMITTED_FIELDS,
     ENDPOINTS_TOP_FIELDS,
     accelerator_count,
     build_endpoints,
@@ -27,8 +28,15 @@ from mlperf_sysinfo.output import (
 
 from .conftest import GOOD_CONFIG, write_yaml
 
-#: The JSON skeleton from endpoints rules 8.2.1, verbatim.
+#: The JSON skeleton from endpoints rules 8.2.1, verbatim. It is the published
+#: rules, so it is never edited to match this tool -- a field this tool chooses
+#: not to write is named in ENDPOINTS_OMITTED_FIELDS instead.
 TEMPLATE_PATH = Path(__file__).parent / "fixtures" / "endpoints_8_2_1_template.json"
+
+
+def template_fields(template: dict) -> list[str]:
+    """The 8.2.1 top level, less what this tool deliberately does not write."""
+    return [f for f in template if f not in ENDPOINTS_OMITTED_FIELDS]
 
 
 class TestProfileLoading:
@@ -176,7 +184,7 @@ class TestEndpointsShape:
         cfg = load_config(good_config_file)
         out = build_endpoints(collected, cfg)
         assert out["system_name"] == "H100x8_vLLM"
-        assert out["system_category"] == "datacenter"
+        assert out["shortened_system_name"] == "H100x8"
         assert out["system_availability_status"] == "available"
         assert out["division"] == "standardized"
 
@@ -203,7 +211,7 @@ class TestEndpointsShape:
         out = build_endpoints(collected, cfg)
         template = json.loads(TEMPLATE_PATH.read_text())
 
-        assert list(out) == list(template)
+        assert list(out) == template_fields(template)
         assert list(out["node_types"][0]) == list(template["node_types"][0])
         assert list(out["node_types"][0]["accelerator_info"][0]) == list(
             template["node_types"][0]["accelerator_info"][0]
@@ -212,15 +220,17 @@ class TestEndpointsShape:
     def test_the_field_lists_match_the_template(self):
         """The lists the shaping code is driven by, against the same skeleton."""
         template = json.loads(TEMPLATE_PATH.read_text())
-        assert ENDPOINTS_TOP_FIELDS == tuple(template)
+        assert ENDPOINTS_TOP_FIELDS == tuple(template_fields(template))
         assert ENDPOINTS_NODE_FIELDS == tuple(template["node_types"][0])
         assert ENDPOINTS_ACCELERATOR_FIELDS == tuple(
             template["node_types"][0]["accelerator_info"][0]
         )
 
-    def test_the_template_still_has_47_fields(self):
-        """8.2.1 says 47, checked field for field against the 8.2 table. If a
-        rules update changes that, this file needs a deliberate look."""
+    def test_the_template_still_has_48_fields(self):
+        """Checked field for field against the 8.2 table. If a rules update
+        changes that, this file needs a deliberate look -- it is how the
+        `shortened_system_name` / `system_category` / `tps_utilization` churn
+        in the 8.2.1 template surfaced instead of passing quietly."""
         template = json.loads(TEMPLATE_PATH.read_text())
 
         def data_fields(obj: dict) -> int:
@@ -232,7 +242,7 @@ class TestEndpointsShape:
                     total += 1
             return total
 
-        assert data_fields(template) == 47
+        assert data_fields(template) == 48
 
     def test_value_types_match_the_template(self, good_config_file, collected):
         """A count written as "" or a string written as 0 is a schema break."""
@@ -251,7 +261,7 @@ class TestEndpointsShape:
         )
         for produced, expected in pairs:
             for key, sample in expected.items():
-                if isinstance(sample, list):
+                if isinstance(sample, list) or key in ENDPOINTS_OMITTED_FIELDS:
                     continue
                 assert isinstance(produced[key], type(sample)), (
                     f"{key}: expected {type(sample).__name__}, "
@@ -284,6 +294,24 @@ class TestEndpointsShape:
         """Model, dataset and submitter metadata moved out; notes moved inward."""
         cfg = load_config(good_config_file)
         assert gone not in build_endpoints(collected, cfg)
+
+    def test_the_omitted_fields_are_in_the_template_but_not_written(self):
+        """Named on purpose, so a field this tool declines to write is a
+        decision in one place rather than a gap in a list."""
+        template = json.loads(TEMPLATE_PATH.read_text())
+        for name in ENDPOINTS_OMITTED_FIELDS:
+            assert name in template
+
+    def test_an_omitted_field_is_dropped_even_when_collected(
+        self, good_config_file, collected
+    ):
+        """Being in the capture is not the same as being written: the omission
+        has to hold on the way out, not only on the way in."""
+        cfg = load_config(good_config_file)
+        collected = {**collected, **dict.fromkeys(ENDPOINTS_OMITTED_FIELDS, 1)}
+        out = build_endpoints(collected, cfg)
+        for name in ENDPOINTS_OMITTED_FIELDS:
+            assert name not in out
 
     def test_the_run_configuration_is_carried_through(self, good_config_file, collected):
         cfg = load_config(good_config_file)

@@ -111,9 +111,9 @@ def _as_int(value: Any, default: int = 1) -> int:
 #:   * submitter_org_names, submitter_contact, submission_id, submission_date,
 #:     publish_date, measured_accuracy_score, system_type_detail -- dropped from
 #:     the field table.
-#:   * shortened_system_name -- in the 8.2 table but not in the 8.2.1 template,
-#:     which the template says was checked against the table field for field.
-#:     Following the template until that is resolved upstream.
+#:   * tps_utilization -- a result, not a description: it is this run's TPS over
+#:     the best of every run, so it cannot be known until every run exists.
+#:     Submission tooling fills it in; nothing here can.
 ENDPOINTS_ACCELERATOR_FIELDS = (
     "accelerator_model_name",
     "accelerators_per_node",
@@ -149,11 +149,20 @@ ENDPOINTS_NODE_FIELDS = (
     "sw_notes",
 )
 
+#: In the 8.2.1 template but deliberately not written, so the omission is one
+#: named thing rather than a field quietly missing from a list.
+ENDPOINTS_OMITTED_FIELDS = ("tps_utilization",)
+
+#: Rules 8.2: "Shortened system_name that's at most 20 characters." Checked
+#: during pre-flight rather than at write time, so a submitter hears about it
+#: before a multi-node capture runs rather than after.
+ENDPOINTS_SHORT_NAME_MAX = 20
+
 ENDPOINTS_TOP_FIELDS = (
     "division",
     "system_name",
+    "shortened_system_name",
     "system_availability_status",
-    "system_category",
     "system_size",
     "system_node_ensemble_count",
     "system_node_ensemble_total",
@@ -315,8 +324,8 @@ def build_endpoints(collected: dict, config: SysinfoConfig) -> dict:
         {
             "division": _s(sub.division),
             "system_name": config.system.name,
+            "shortened_system_name": _s(config.system.shortened_name),
             "system_availability_status": _s(config.system.availability),
-            "system_category": _s(config.system.category),
             "system_size": config.system.size or endpoints_system_size(node_types),
         }
     )
@@ -572,7 +581,7 @@ NODE_SCOPE = "node_types[]."
 #: check them against.
 _NESTED_KEYS = {
     "system.name": "system_name",
-    "system.category": "system_category",
+    "system.shortened_name": "shortened_system_name",
     "system.availability": "system_availability_status",
     "submission.division": "division",
     "serving.url": "endpoint_url",

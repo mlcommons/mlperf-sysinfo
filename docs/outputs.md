@@ -71,12 +71,16 @@ hardware and a `number_of_nodes` count — and `accelerator_info` nests the
 accelerators inside it, so a node type holding more than one accelerator model
 can say so.
 
+`tps_utilization` is the one field from that template this tool does not write.
+It is this run's throughput over the best of every run, so it cannot be known
+until every run exists — submission tooling fills it in.
+
 ```json
 {
   "division": "standardized",
   "system_name": "H100x8",
+  "shortened_system_name": "H100x8",
   "system_availability_status": "available",
-  "system_category": "datacenter",
   "system_size": "8 accelerators",
   "system_node_ensemble_count": 1,
   "system_node_ensemble_total": 1,
@@ -217,12 +221,11 @@ hardware lifted to the top level and renamed to the checker's names.
 
 | Grouped (`endpoints`) | Flat (`inference`) |
 | --- | --- |
-| `system_category` | `system_type` |
 | `system_availability_status` | `status` |
 | `serving_framework` | `framework` |
 | `node_types[]`, with `accelerator_info[]` inside | Hardware lifted to the top level |
 | `system_node_ensemble_total` | `number_of_nodes` |
-| — | `submitter`, `submitter_contact`, `system_type_detail` |
+| — | `system_type`, `submitter`, `submitter_contact`, `system_type_detail` |
 | `endpoint_url` and the run configuration | — |
 
 They are also two different field sets on the collection side, not one file

@@ -62,11 +62,56 @@ class TestCheck:
 
     def test_placeholder_is_a_config_problem(self, tmp_path, endpoints_profile, all_reachable):
         data = copy.deepcopy(GOOD_CONFIG)
-        data["system"]["category"] = "CHANGEME"
+        data["system"]["name"] = "CHANGEME"
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         report = run_check(cfg, endpoints_profile)
         assert report.has_config_problems
-        assert report.placeholder_required[0][0] == "system.category"
+        assert report.placeholder_required[0][0] == "system.name"
+
+    def test_a_short_name_over_20_characters_is_a_config_problem(
+        self, tmp_path, endpoints_profile, all_reachable
+    ):
+        """Rules 8.2 caps it at 20. Catching it here rather than at write time
+        is the point: the alternative is hearing it from a reviewer after a
+        multi-node capture has already run."""
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["system"]["shortened_name"] = "H100x8_vLLM_disaggregated_prefill"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert report.has_config_problems
+        path, why = next(p for p in report.missing_required if p[0] == "system.shortened_name")
+        assert "20 characters" in why
+
+    def test_a_short_name_of_exactly_20_characters_is_accepted(
+        self, tmp_path, endpoints_profile, all_reachable
+    ):
+        """"At most 20" includes 20. An off-by-one here rejects a legal name."""
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["system"]["shortened_name"] = "x" * 20
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert not report.has_config_problems
+
+    def test_the_short_name_is_required(self, tmp_path, endpoints_profile, all_reachable):
+        data = copy.deepcopy(GOOD_CONFIG)
+        del data["system"]["shortened_name"]
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, endpoints_profile)
+        assert report.has_config_problems
+        assert any(p == "system.shortened_name" for p, _ in report.missing_required)
+
+    def test_the_length_rule_does_not_apply_to_the_other_profiles(self, tmp_path):
+        """It is an endpoints rule. Training and inference have no such field,
+        so a long value there is nobody's business to complain about."""
+        from mlperf_sysinfo import profiles
+
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["profile"] = "inference"
+        data["system"]["shortened_name"] = "x" * 40
+        data["system"]["category"] = "datacenter"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        report = run_check(cfg, profiles.load("inference"), skip_network=True)
+        assert not any(p == "system.shortened_name" for p, _ in report.missing_required)
 
     def test_the_endpoint_is_required(self, tmp_path, endpoints_profile, all_reachable):
         """endpoint_url is rules 8.2 metadata: an endpoints submission without
@@ -217,17 +262,30 @@ class TestMlcInvocation:
         assert "serving_node" not in kwargs
         assert "endpoint_url" not in kwargs
 
-    def test_redfish_only_when_configured_and_allowed(self, tmp_path, endpoints_profile):
+    def _with_power(self, tmp_path):
         data = copy.deepcopy(GOOD_CONFIG)
         data["power"] = {"redfish": {"endpoint": "https://bmc", "username": "u", "password": "p"}}
-        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
-        kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+        return load_config(write_yaml(tmp_path / "c.yaml", data))
+
+    def test_redfish_when_configured_and_the_profile_allows_it(self, tmp_path):
+        cfg = self._with_power(tmp_path)
+        kwargs = build_mlc_kwargs(cfg, profiles.load("inference"), tmp_path)
         assert "_redfish" in kwargs["tags"]
         assert kwargs["redfish_endpoint"] == "https://bmc"
 
-    def test_no_redfish_tag_without_power_section(self, good_config_file, endpoints_profile, tmp_path):
+    def test_no_redfish_when_the_profile_does_not_allow_it(self, tmp_path, endpoints_profile):
+        """Endpoints leaves it off until the working group decides whether
+        power belongs in the submission. A power section in the config is not
+        enough on its own -- both halves have to agree."""
+        cfg = self._with_power(tmp_path)
+        kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+        assert "_redfish" not in kwargs["tags"]
+        assert "redfish_endpoint" not in kwargs
+
+    def test_no_redfish_tag_without_power_section(self, good_config_file, tmp_path):
         cfg = load_config(good_config_file)
-        assert "_redfish" not in build_mlc_kwargs(cfg, endpoints_profile, tmp_path)["tags"]
+        kwargs = build_mlc_kwargs(cfg, profiles.load("inference"), tmp_path)
+        assert "_redfish" not in kwargs["tags"]
 
 
 class _FakeMlc:

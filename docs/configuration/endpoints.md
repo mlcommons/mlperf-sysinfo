@@ -13,7 +13,7 @@ output:
 
 system:
   name: H100x8_vLLM
-  category: datacenter
+  shortened_name: H100x8
   availability: available
   accelerator: cuda
   cooling: air
@@ -44,7 +44,7 @@ run:
 | Field | Why |
 | --- | --- |
 | `system.name` | Identifier for the system under test |
-| `system.category` | Whether this is a datacenter or an edge system |
+| `system.shortened_name` | Short form of the name, at most 20 characters |
 | `system.availability` | Availability at submission time, e.g. available, preview or rdi |
 | `submission.division` | One of standardized, serviced or rdi |
 | `serving.url` | The endpoint under test |
@@ -70,7 +70,7 @@ wherever it turns up.
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `name` | string | — | **Required.** Identifier for the system under test |
-| `category` | string | — | **Required.** `datacenter` or `edge` |
+| `shortened_name` | string | — | **Required.** Short form of `name` for tables and charts. At most 20 characters — `check` stops if it is longer. Written as `shortened_system_name` |
 | `availability` | string | — | **Required.** e.g. `available`, `preview`, `rdi` |
 | `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely — a GPU system left at the default captures no accelerator at all |
 | `cooling` | string | — | **Recommended.** e.g. `air`, `liquid`, `passive`. Written into every node type |
@@ -106,16 +106,6 @@ listing it twice is not required.
 !!! warning "The serving log must actually exist"
     Server stdout/stderr has to be redirected to `serving.log` on that node.
     `check` verifies it is there before you spend a capture finding out.
-
-### `power`
-
-Optional, opt-in. Enables Redfish capture from the BMC.
-
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `redfish.endpoint` | string | — | BMC address |
-| `redfish.username` | string | — | Use `${VAR}` |
-| `redfish.password` | string | — | Use `${VAR}` |
 
 ### `submission`
 

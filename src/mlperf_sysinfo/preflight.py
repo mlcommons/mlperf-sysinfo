@@ -31,7 +31,7 @@ from .config import (
     is_placeholder,
 )
 from .logs import STYLED
-from .output import normalize_training_status
+from .output import ENDPOINTS_SHORT_NAME_MAX, normalize_training_status
 from .profiles import Profile
 
 SSH_TIMEOUT = 15
@@ -285,6 +285,20 @@ def run_check(
             report.missing_required.append(("system.availability", bad_status))
             # It counted as satisfied above -- it is filled in, just not with
             # something training accepts.
+            report.satisfied_count = max(0, report.satisfied_count - 1)
+
+    # Rules 8.2 caps the short name at 20 characters. The same argument as
+    # above: cheaper to hear now than from a reviewer.
+    if profile.benchmark == "endpoints":
+        short = (config.system.shortened_name or "").strip()
+        if len(short) > ENDPOINTS_SHORT_NAME_MAX:
+            report.missing_required.append(
+                (
+                    "system.shortened_name",
+                    f"a value of at most {ENDPOINTS_SHORT_NAME_MAX} characters. "
+                    f"{short!r} is {len(short)}",
+                )
+            )
             report.satisfied_count = max(0, report.satisfied_count - 1)
 
     if config.nodes.groups:

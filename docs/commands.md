@@ -233,7 +233,7 @@ DETECTED
 
 FROM YOUR CONFIG
   division       standardized
-  category       datacenter
+  short name     H100x8
   availability   available
   endpoint       http://node1:8000
   run config     TP 8
