@@ -70,11 +70,11 @@ wherever it turns up.
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `name` | string | — | **Required.** Identifier for the system under test |
-| `shortened_name` | string | — | **Required.** Short form of `name` for tables and charts. At most 20 characters — `check` stops if it is longer. Written as `shortened_system_name` |
+| `shortened_name` | string | — | **Required.** Short form of `name` for tables and charts. At most 20 characters, and `check` stops if it is longer. Written as `shortened_system_name` |
 | `availability` | string | — | **Required.** e.g. `available`, `preview`, `rdi` |
-| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely — a GPU system left at the default captures no accelerator at all |
+| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely, so a GPU system left at the default captures no accelerator at all |
 | `cooling` | string | — | **Recommended.** e.g. `air`, `liquid`, `passive`. Written into every node type |
-| `size` | string | computed | Overrides `system_size`. Rarely needed — see [Sample outputs](../outputs.md#system_size) for what this profile computes |
+| `size` | string | computed | Overrides `system_size`. Rarely needed. See [Sample outputs](../outputs.md#system_size) for what this profile computes |
 
 ### `nodes`
 
@@ -88,7 +88,7 @@ wherever it turns up.
 !!! note "Why `include_local` defaults to false"
     An orchestrator machine driving a cluster should not describe itself by
     accident. A config with none of `include_local: true`, an `ssh` entry, or a
-    `serving.node` is rejected — there would be nothing to collect.
+    `serving.node` is rejected, because there would be nothing to collect.
 
 ### `serving`
 
@@ -100,8 +100,8 @@ wherever it turns up.
 | `framework` | enum | `auto` | `auto` \| `vllm` \| `sglang` \| `trtllm` |
 
 `node` does not have to also appear under `nodes.ssh`. If it names a machine not
-already listed there, it is still reached and its hardware still collected —
-listing it twice is not required.
+already listed there, it is still reached and its hardware still collected.
+Listing it twice is not required.
 
 !!! warning "The serving log must actually exist"
     Server stdout/stderr has to be redirected to `serving.log` on that node.

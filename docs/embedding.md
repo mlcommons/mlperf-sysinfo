@@ -66,8 +66,8 @@ except CaptureError as e:
 
 !!! tip "Never lose benchmark results to a sysinfo failure"
     Write your results first, then capture. A system-info failure at the end of
-    a run should be logged loudly and exit zero — the benchmark output is the
-    expensive artifact.
+    a run should be logged loudly and exit zero, because the benchmark output is
+    the expensive artifact.
 
     ```python
     write_results(report_dir)
@@ -95,7 +95,7 @@ def capture(
 ```
 
 `progress` is called as `(kind, label, detail)` where `kind` is one of `ok`,
-`bad`, `warn`, `skip` — the caller owns all rendering.
+`bad`, `warn`, `skip`. The caller owns all rendering.
 
 `CaptureResult.log_path` is the run log for that capture, which is the thing to
 surface or attach when a capture comes back partial. It is written whether or
@@ -114,7 +114,7 @@ logging.getLogger("mlperf_sysinfo").addHandler(my_handler)
 
 Nothing needs configuring for this to work. The logger is levelled to `DEBUG` at
 import so records always reach whatever handlers exist, and propagation is left
-**on** — so your root handlers see them with no setup. Levels are chosen for
+**on**, so your root handlers see them with no setup. Levels are chosen for
 severity rather than for the CLI's own rendering: an unreachable node is a
 `WARNING` because you have `run_check()` and no styled report to read it from.
 
@@ -140,7 +140,7 @@ if not report.ok:
         log.error(problem)
 ```
 
-Both work on the file alone — a capture carries the profile it was made under,
+Both work on the file alone. A capture carries the profile it was made under,
 so neither needs the original config.
 
 ## In a benchmark config

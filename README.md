@@ -102,7 +102,7 @@ WORTH FILLING IN
 
 </details>
 
-The warnings above are expected for a config with no live endpoint -- they
+The warnings above are expected for a config with no live endpoint, and they
 don't block anything. `capture` always runs this check first, with no flag
 to skip it; a missing *required* field or an unreachable node is what would
 stop the run.
@@ -220,8 +220,8 @@ and what the output looks like.
 | `training` | flat, matches `mlperf_logging/system_desc_checker` | A different checker from `inference`, with a different field set. Named `<system_name>.json` |
 
 `mlperf-sysinfo profiles` lists them. All profiles live in this repo and ship
-with the package. A config may also point at a file --
-`profile: ./my-profile.yaml` -- for building one before it is upstreamed.
+with the package. A config may also point at a file,
+`profile: ./my-profile.yaml`, for building one before it is upstreamed.
 
 Profiles always track the current MLPerf round; there is no version to pin. The
 round that applied is stamped into every output file, so a captured file
@@ -257,8 +257,8 @@ at the start of a benchmark rather than at the end of one.
 ## Where files land
 
 The deliverable is the only thing written to `output.dir`. Everything the
-automation produces -- the raw intermediate, per-node files, and the run log
--- goes into `output.dir/.mlperf-sysinfo/`. The run log is named after the time
+automation produces, meaning the raw intermediate, per-node files, and the run
+log, goes into `output.dir/.mlperf-sysinfo/`. The run log is named after the time
 the capture started (`capture_20260819_202120.log`), carries a header saying
 which profile, config and nodes produced it, and closes with the outcome.
 

@@ -6,8 +6,8 @@
 
 Probing a machine is hard, platform-specific work that should stay shared and
 unchanged across MLCommons. Deciding what a working group must supply, and what
-the resulting file should look like, is policy — and policy differs per group,
-so it belongs in a package groups can configure.
+the resulting file should look like, is policy. Policy differs per group, so it
+belongs in a package groups can configure.
 
 ```mermaid
 flowchart LR
@@ -19,9 +19,9 @@ flowchart LR
 
 The split runs along one line: **the automation owns what the hardware is, this
 package owns everything a person had to type.** The profile's `benchmark` names
-which field set to gather — the Endpoints and Inference field sets are not the
-same shape and are not interchangeable — and what comes back is treated as the
-probed truth. What each submitter-supplied field *says* is decided here.
+which field set to gather, because the Endpoints and Inference field sets are
+not the same shape and are not interchangeable. What comes back is treated as
+the probed truth. What each submitter-supplied field *says* is decided here.
 
 !!! warning "Why the metadata is not left to the automation"
     The automation's defaults for submitter-supplied fields are placeholder
@@ -41,10 +41,10 @@ probed truth. What each submitter-supplied field *says* is decided here.
 | --- | --- |
 | `config.py` | The config schema, `extends` merging, `${VAR}` interpolation, placeholder detection |
 | `profiles/` | What each working group requires, collects, and writes. YAML, no Python |
-| `preflight.py` | Validation and reachability — the `check` command's engine |
+| `preflight.py` | Validation and reachability, the `check` command's engine |
 | `collector.py` | Invokes the automation, verifies what came back, orchestrates the run |
 | `output.py` | Orders the collected field set, overlays config metadata, stamps provenance |
-| `report.py` | Reads a captured file back — `show` and `validate` |
+| `report.py` | Reads a captured file back for `show` and `validate` |
 | `cli.py` / `ui.py` | The command line and its rendering |
 | `errors.py` | Every deliberate failure is one of these |
 
@@ -85,8 +85,8 @@ This distinction is the core of the design.
 
 ### Verifying what came back
 
-A node can be perfectly reachable and still return nothing — an unsupported OS,
-a probe that needs `sudo`. So the node count is taken from the collected data,
+A node can be perfectly reachable and still return nothing, such as an
+unsupported OS or a probe that needs `sudo`. So the node count is taken from the collected data,
 never from the config:
 
 - **zero nodes** → always an error, even with `--allow-partial`. No file written.
@@ -153,12 +153,13 @@ Four things about the body are deliberate:
   that took them, not just the automation's output. What the automation returned
   and what was concluded from it are different things, and the second is usually
   what is being reconstructed. Every level reaches the file regardless of what
-  the terminal is set to — see [Logging](commands.md#logging).
+  the terminal is set to. See [Logging](commands.md#logging).
 - **Lines mlcflow already stamped keep their own stamp.** A second one in front
   would only push the real timestamp out of the reader's eye line. The two
   styles are close enough on purpose, so a mixed log still reads down the page.
 - **Indented lines are indented, not stamped.** They are the tail of the
-  message above -- the wrapped rest of a warning, or the frames of a traceback.
+  message above, such as the wrapped rest of a warning or the frames of a
+  traceback.
   A stamp on each claims they were logged separately and pulls the block apart.
 - **Records from before the file existed are replayed into it.** Loading the
   config and the whole pre-flight check happen before an output directory is

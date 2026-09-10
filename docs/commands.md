@@ -27,7 +27,7 @@ must never look like a failed check.
 | Code | Meaning |
 | --- | --- |
 | `0` | All good |
-| `1` | The run found problems — missing fields, unreachable nodes, an invalid file |
+| `1` | The run found problems: missing fields, unreachable nodes, an invalid file |
 | `2` | The command or the config was wrong |
 
 ---
@@ -57,7 +57,7 @@ mlperf-sysinfo check -c CONFIG [--offline] [--verbose] [--log-level LEVEL]
 ```
 
 Validates the config against its profile, then reaches every node, endpoint and
-serving log it names — in parallel, with a 15 second timeout each. Nothing is
+serving log it names, in parallel, with a 15 second timeout each. Nothing is
 collected and nothing is written.
 
 `--offline` validates the config without touching the network.
@@ -83,9 +83,8 @@ REQUIRED BY PROFILE 'ENDPOINTS'
 ### A config that is not
 
 This is the starter config with placeholders left in. Note that
-`submission.container_link` is not a field the profile requires — every string
-is scanned, because a placeholder in *any* field still reaches the submission
-file.
+`submission.container_link` is not a field the profile requires. Every string is
+scanned, because a placeholder in *any* field still reaches the submission file.
 
 ```console
 $ mlperf-sysinfo check -c ph.yaml
@@ -140,8 +139,8 @@ mlperf-sysinfo capture -c CONFIG [--allow-partial] [--run-metadata PATH] [--verb
                        [--log-level LEVEL]
 ```
 
-Runs the check first — always, with no way to skip it — then collects and
-writes the output file.
+Runs the check first, always, with no way to skip it, then collects and writes
+the output file.
 
 ```console
 $ mlperf-sysinfo capture -c sysinfo.yaml
@@ -158,8 +157,7 @@ $ mlperf-sysinfo capture -c sysinfo.yaml
 Every run leaves a log beside the deliverable, timestamped so a retry does not
 overwrite the log of the failure that prompted it. It records which profile,
 config and nodes produced the run, stamps each line the automation emits, and
-closes with the outcome -- see
-[the run log](architecture.md#the-run-log).
+closes with the outcome. See [the run log](architecture.md#the-run-log).
 
 ### Options
 
@@ -168,7 +166,7 @@ closes with the outcome -- see
 | `--allow-partial` | Proceed when a node is unreachable or does not report back. The output is marked partial. Never forgives a config problem, and never forgives zero nodes |
 | `--run-metadata PATH` | A `run_metadata.json` to patch with serving-config values extracted from the server's startup log |
 | `--verbose` | Watch the automation's own output on the terminal as well, and show this package's own log down to `debug`. The run log is written either way |
-| `--log-level` | `debug`, `info`, `warning` or `error` — what of this package's own log reaches the terminal. The run log file always keeps every level |
+| `--log-level` | `debug`, `info`, `warning` or `error`. Sets what of this package's own log reaches the terminal. The run log file always keeps every level |
 
 ### When the check fails
 
@@ -209,7 +207,7 @@ Exit code `1`, and the file carries `"complete": false`.
 mlperf-sysinfo show PATH
 ```
 
-Reads a captured file on its own — it carries the profile it was made under, so
+Reads a captured file on its own. It carries the profile it was made under, so
 no config is needed. The split between **detected** and **from your config** is
 deliberate: it shows at a glance what the tool found versus what a person
 asserted.
@@ -253,8 +251,8 @@ mlperf-sysinfo validate PATH [--profile NAME]
 ```
 
 The last gate before submission. Checks required fields are present and
-non-empty, sweeps the **whole document** for placeholder text — including
-inside `node_types` — and refuses a partial capture.
+non-empty, sweeps the **whole document** for placeholder text, including inside
+`node_types`, and refuses a partial capture.
 
 ```console
 $ mlperf-sysinfo validate results/h100_run1/system_desc.json
@@ -280,8 +278,8 @@ PROBLEMS
 ```
 
 `--profile` validates against a different profile than the one stamped in the
-file — useful when checking whether a capture would satisfy another group's
-rules.
+file, which is useful when checking whether a capture would satisfy another
+group's rules.
 
 ---
 
@@ -336,7 +334,7 @@ error  "-v" is not a command or a top-level flag. Did you mean "--version"?
 `check` and `capture`, and one letter meaning two things is worse than being
 asked which you wanted.
 
-Misspelled config options get the same treatment — see
+Misspelled config options get the same treatment. See
 [The config file](configuration/index.md#unknown-and-misspelled-options).
 
 ## Logging
@@ -357,14 +355,14 @@ problem list and the `profiles` listing keep their columns, because a
 31-character prefix on every row costs exactly the scannability a table exists
 for. So `check` is a record, then a table, then a record.
 
-Nothing is said twice. Where a table renders a fact — an unreachable node, an
-unset field — the log record for it is still *made*, because the run log needs
+Nothing is said twice. Where a table renders a fact such as an unreachable node
+or an unset field, the log record for it is still *made*, because the run log needs
 it and a library caller has `run_check()` and no report to read it from, but the
 terminal drops it. `--log-level debug` shows those too, since at that point you
 have asked for everything.
 
-**The run log file always keeps every level**, whatever the terminal is set to —
-see [the run log](architecture.md#the-run-log).
+**The run log file always keeps every level**, whatever the terminal is set to.
+See [the run log](architecture.md#the-run-log).
 
 Log lines go to **stderr**, so redirecting the tables keeps the trace out of
 them, and the other way round:
@@ -377,5 +375,5 @@ mlperf-sysinfo check -c sysinfo.yaml >report.txt     # trace on screen, tables i
 ## Colour
 
 Output is coloured on a terminal and plain when piped. `NO_COLOR=1` and
-`TERM=dumb` both suppress it. Log lines are coloured by level — the level word
+`TERM=dumb` both suppress it. Log lines are coloured by level, the level word
 only, so it does not compete with the styled blocks.

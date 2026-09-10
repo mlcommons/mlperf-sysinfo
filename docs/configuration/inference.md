@@ -67,10 +67,10 @@ wherever it turns up.
 | `name` | string | — | **Required.** Identifier for the system under test |
 | `category` | string | — | **Required.** `datacenter` or `edge`. Written as `system_type` |
 | `availability` | string | — | **Required.** e.g. `available`, `preview`, `rdi`. Written as `status` |
-| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely — a GPU system left at the default captures no accelerator at all |
+| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely, so a GPU system left at the default captures no accelerator at all |
 | `cooling` | string | — | e.g. `air`, `liquid`, `passive` |
 | `type_detail` | string | — | Free text, written as `system_type_detail`. Rack or chassis detail the field list has no column of its own for |
-| `size` | string | computed | Overrides `system_size`. Rarely needed — see [Sample outputs](../outputs.md#system_size) for what this profile computes |
+| `size` | string | computed | Overrides `system_size`. Rarely needed. See [Sample outputs](../outputs.md#system_size) for what this profile computes |
 
 ### `nodes`
 
@@ -84,7 +84,7 @@ wherever it turns up.
 !!! note "Why `include_local` defaults to false"
     An orchestrator machine driving a cluster should not describe itself by
     accident. A config with none of `include_local: true`, an `ssh` entry, or a
-    `serving.node` is rejected — there would be nothing to collect.
+    `serving.node` is rejected, because there would be nothing to collect.
 
 ### `power`
 
@@ -109,7 +109,7 @@ Optional, opt-in. Enables Redfish capture from the BMC.
 
 ## What this profile ignores
 
-There is no `serving` or `run` section here — an inference capture has nowhere
+There is no `serving` or `run` section here. An inference capture has nowhere
 to put a URL, a run configuration, or `submission.container_link`, and those
 values are not read.
 

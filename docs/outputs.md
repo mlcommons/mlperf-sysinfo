@@ -4,7 +4,7 @@ Every file on this page is a real capture from an 8×H100 node, trimmed only
 where noted. Nothing here is invented.
 
 The profile decides the shape. All three were produced from the same machine
-and almost the same config — only `profile:` differed.
+and almost the same config, with only `profile:` differing.
 
 ## Provenance: the block every output carries
 
@@ -37,7 +37,7 @@ This is what makes a captured file self-describing:
 
 | Field | Why it matters |
 | --- | --- |
-| `profile` + `profile_round` | Which rules produced this file. Profiles track the current round, so the file records which round that was. A profile that names no round omits `profile_round` rather than writing it empty — see [`training`](#training-flat) |
+| `profile` + `profile_round` | Which rules produced this file. Profiles track the current round, so the file records which round that was. A profile that names no round omits `profile_round` rather than writing it empty. See [`training`](#training-flat) |
 | `benchmark` | Which field set the file holds. `shape` alone stopped being enough to say once `inference` and `training` were both flat |
 | `nodes_expected` / `nodes_collected` | What was asked for versus what answered |
 | `complete` | `false` means a partial capture. `validate` refuses these |
@@ -52,7 +52,7 @@ package, so the stamp takes whichever form applies:
 "mlc_scripts": { "package_version": "1.2.0a2" }
 ```
 
-That is what a `pip install` produces — `mlc-scripts` runs from the installed
+That is what a `pip install` produces. `mlc-scripts` runs from the installed
 release and there is no repository to read a commit from.
 
 A git checkout stamps the commit instead, plus a per-node breakdown and a
@@ -66,14 +66,14 @@ mixed-version run stays visible rather than hidden.
 The field set defined by [endpoints rules
 8.2](https://github.com/mlcommons/endpoints_policies/blob/main/endpoints_rules.md),
 in the order of the 8.2.1 template. `node_types` keeps multi-node and
-disaggregated systems legible — one entry per node type, each with its own
-hardware and a `number_of_nodes` count — and `accelerator_info` nests the
+disaggregated systems legible, with one entry per node type, each with its own
+hardware and a `number_of_nodes` count. `accelerator_info` nests the
 accelerators inside it, so a node type holding more than one accelerator model
 can say so.
 
 `tps_utilization` is the one field from that template this tool does not write.
 It is this run's throughput over the best of every run, so it cannot be known
-until every run exists — submission tooling fills it in.
+until every run exists. Submission tooling fills it in.
 
 ```json
 {
@@ -145,12 +145,12 @@ here and are not any more:
 | `submitter_org_names`, `submitter_contact`, `submission_id`, `submission_date`, `publish_date`, `measured_accuracy_score`, `system_type_detail`, `input_token_average`, `output_token_average` | Dropped from the field table |
 
 `hw_notes`, `sw_notes`, `other_hardware`, `cooling` and `container_link` are
-still written, but per node type rather than once at the top level — the same
+still written, but per node type rather than once at the top level. The same
 config value is copied onto every entry.
 
 !!! info "\"N/A\" is an answer, and it is left alone"
     Where a probe looked and found nothing it writes `N/A` or
-    `Not detected: ...`, and that survives into the file — including in fields
+    `Not detected: ...`, and that survives into the file, including in fields
     the template types as a number. Blanking it would lose the distinction
     between "not detected" and "not applicable", and writing `0` would hide a
     failed detection behind a plausible answer. `validate` warns about every
@@ -159,7 +159,7 @@ config value is copied onto every entry.
     JSON-schema check of the template: fill those fields in first.
 
 !!! info "Empty strings, never placeholders"
-    A field nobody supplied comes out as `""` (or `0` for a count) — never as
+    A field nobody supplied comes out as `""` (or `0` for a count), never as
     `"Insert your organization name here"`, which is what the underlying
     automation defaults to and what the pre-package pipeline used to write
     into submissions. Overwriting those defaults from the config is the
@@ -246,8 +246,7 @@ comma-joined so nothing is silently dropped.
 The field set
 [`mlperf_logging/system_desc_checker`](https://github.com/mlcommons/logging/tree/master/mlperf_logging/system_desc_checker)
 validates, in the order that checker lists its `required_fields`. Flat like
-`inference`, but **not the same field set and not the same checker** — see
-[What is different from `inference`](configuration/training.md#what-is-different-from-inference).
+`inference`, but **not the same field set and not the same checker**.
 
 The file is named after `system.name`, because a training submission stores it
 as `<submitter>/systems/<system_name>.json`.
@@ -294,7 +293,7 @@ as `<submitter>/systems/<system_name>.json`.
 
 Three things about this file are not true of the flat `inference` one:
 
-**Every value is a string.** Counts included — `"8"`, not `8`. That is the form
+**Every value is a string.** Counts included, so `"8"`, not `8`. That is the form
 existing training submissions use.
 
 **A failed probe becomes empty, not prose.** `host_memory_configuration` above
@@ -305,7 +304,7 @@ in before submitting.
 
 **No `profile_round` is stamped.** MLPerf Training numbers its rulesets
 independently of Inference, so the profile records no round rather than one
-that might be wrong. The field is omitted rather than written empty — an empty
+that might be wrong. The field is omitted rather than written empty, because an empty
 one would read as a round that failed to record.
 
 ---
@@ -317,7 +316,7 @@ The two profiles define this field differently, so they compute it differently.
 **`endpoints`** follows rules 8.2: *"Number of accelerators per node type"*. Per
 node type, `number_of_nodes × accelerators_per_node` summed over every
 accelerator model it hosts, joined with `+`. The field counts accelerators and
-nothing else — a node type with none reports `0`, rather than falling back to
+nothing else. A node type with none reports `0`, rather than falling back to
 host processors and answering a different question.
 
 ```text
@@ -362,5 +361,5 @@ PROBLEMS
   1 problem(s). This file is not ready to submit.
 ```
 
-A partial capture cannot be mistaken for a whole one — that is the point of
+A partial capture cannot be mistaken for a whole one. That is the point of
 stamping it rather than just logging a warning at capture time.

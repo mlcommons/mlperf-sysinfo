@@ -102,7 +102,7 @@ WORTH FILLING IN
 
 </details>
 
-The warnings above are expected for a config with no live endpoint -- they
+The warnings above are expected for a config with no live endpoint, and they
 don't block anything. `capture` always runs this check first, and there is no
 flag to skip it; a missing *required* field or an unreachable node is what
 would stop the run.

@@ -1,14 +1,8 @@
 # The `training` config
 
-MLPerf Training submissions, written as the flat `<system_desc_id>.json` a
-submission stores under `<submitter>/systems/`.
-
-The authority for this format is
-[`mlperf_logging/system_desc_checker`](https://github.com/mlcommons/logging/tree/master/mlperf_logging/system_desc_checker),
-which is a **different checker from the one MLPerf Inference uses**. The two
-field sets drift independently, so a config that works for `inference` is not a
-config that works here — see [What is different from
-`inference`](#what-is-different-from-inference).
+Developed with the training
+[`system_desc_checker`](https://github.com/mlcommons/logging/tree/master/mlperf_logging/system_desc_checker)
+in mind.
 
 `mlperf-sysinfo init training` writes a commented starter config covering the
 same fields.
@@ -43,9 +37,8 @@ submission:
     software: "NCCL 2.21, CUDA 12.4"
 ```
 
-That writes `results/training_run1/dgx-h100-n8.json` — the filename comes from
-`system.name`, because a training submission stores the file as
-`<submitter>/systems/<system_name>.json`. Set `output.file` to override it.
+This collects sysinfo from the machine from where the command is run, as
+`include_local` is set to true and no ssh targets were listed.
 
 ## `system.availability` — four values, and no others
 
@@ -117,22 +110,12 @@ wherever it turns up.
 | `networking_topology` | string | — | **Required.** Written as `host_networking_topology` |
 | `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left at the default, a GPU system captures no accelerator at all |
 
-`category`, `type_detail` and `size` are inference fields. The training field
-set has no `system_type`, `system_type_detail` or `system_size`, so setting
-them here changes nothing.
-
 ### `training`
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `framework` | string | — | **Required.** Training framework and version, e.g. `NVIDIA PyTorch Release 25.04`. Written as `framework` |
 | `framework_name` | string | — | **Recommended.** Short tag for that build. Written only when set |
-
-!!! note "Why not `serving.framework`"
-    `serving.framework` names a log parser to run against a running inference
-    server (`vllm`, `sglang`, `trtllm`). These two are free text describing the
-    stack a training run used, and nothing probes them — the version lives
-    inside a container image this tool never opens.
 
 ### `nodes`
 
@@ -141,7 +124,6 @@ them here changes nothing.
 | `include_local` | bool | `false` | Whether the machine running the command is part of the system |
 | `ssh` | list | `[]` | `user@host` or `user@host:port` |
 | `ssh_key_preconfigured` | bool | `false` | Key auth is already set up; skip the key-file lookup |
-| `groups` | map | — | Function name → list of `{match, count}` |
 
 A multi-node run lists every node, and `number_of_nodes` is counted from what
 actually reported hardware rather than from the length of this list:
@@ -181,59 +163,6 @@ submission:
 | `division` | string | — | **Required.** Either closed or open. Written lower-cased |
 | `notes.hardware` | string | — | **Recommended.** Written as `hw_notes` |
 | `notes.software` | string | — | **Recommended.** Written as `sw_notes` |
-
-`contact` and `container_link` are not part of the training field set and are
-not written.
-
-### `power`
-
-Optional, opt-in. Enables Redfish capture from the BMC. The training field set
-has no power fields, so this produces its own deliverable files alongside the
-system description rather than changing it.
-
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `redfish.endpoint` | string | — | BMC address |
-| `redfish.username` | string | — | Use `${VAR}` |
-| `redfish.password` | string | — | Use `${VAR}` |
-
-## What is different from `inference`
-
-Both are flat documents, which makes it easy to assume they are the same one.
-They are not, and they are validated by different checkers.
-
-| | `inference` | `training` |
-| --- | --- | --- |
-| Checker | Inference `submission_checker` | `mlperf_logging/system_desc_checker` |
-| Output filename | `system_desc.json` | `<system_name>.json` |
-| Availability | `available`, `preview`, `rdi` — written as `status` | [Four long strings](#systemavailability-four-values-and-no-others) — written as `status` |
-| Framework | `serving_framework`, probed | `framework`, from `training.framework` |
-| `submission.contact` | **Required**, written as `submitter_contact` | Not in the field set |
-| Networking topology | Optional | **Required** |
-| Cooling | Optional | **Required** |
-| Round stamped | `profile_round: "6.0"` | None — see below |
-
-!!! note "No round is stamped"
-    MLPerf Training numbers its rulesets independently of Inference, so the
-    training profile deliberately records no `profile_round`. A number that
-    turns out to be the wrong one is worse than none — the field is omitted
-    from the provenance block rather than written empty, because an empty one
-    would read as a round that failed to record.
-
-## Requires an mlc-scripts with `_training`
-
-Collection asks the automation for the `_training` field set. A release that
-does not have that variation silently returns the endpoints one instead, which
-would write every hardware field empty. That is caught rather than shipped:
-
-```console
-error  the collection layer returned the nested field set, not the flat training
-       one. mlc-scripts was asked for '_training' and did not supply it -- the
-       installed release is too old. Every hardware field would have been
-       written empty, so nothing was written.
-```
-
-Upgrade `mlc-scripts` if you see it.
 
 ## Rules that apply to every profile
 

@@ -55,7 +55,7 @@ Every `CHANGEME` below is a field `check` will stop on.
 | `file` | string | profile's own | Output filename |
 
 Only the deliverable is written to `dir`. Everything the collection layer
-produces goes into `dir/.mlperf-sysinfo/` — see
+produces goes into `dir/.mlperf-sysinfo/`. See
 [Architecture](../architecture.md#where-files-land).
 
 ## `${VAR}` — secrets stay out of the file
@@ -101,8 +101,8 @@ Three states that look alike in YAML and are not the same thing:
 | `cooling:` | **Unset.** Stays unset; nothing is guessed |
 | `ssh:` with every entry commented out | **Absent.** Treated as if the key were not there |
 
-The last one is why deleting the final entry under `nodes.ssh` — or under `run:`
-— is not an error.
+The last one is why deleting the final entry under `nodes.ssh`, or under `run:`,
+is not an error.
 
 !!! note "Emptying `nodes.ssh` *is* an error when nothing else is left to look at"
     An absent `ssh` list is only fine while some other machine is still named.
@@ -131,8 +131,8 @@ notes:
   hardware: "insert card in slot 3 before boot"   # fine, not starter text
 ```
 
-Every string is scanned, not only the fields your profile requires — starter
-text in any field still reaches the submission file. The check report calls
+Every string is scanned, not only the fields your profile requires, because
+starter text in any field still reaches the submission file. The check report calls
 these `placeholder`.
 
 ## Unknown and misspelled options
