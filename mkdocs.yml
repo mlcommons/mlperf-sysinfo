@@ -1,8 +1,8 @@
 site_name: mlperf-sysinfo
 site_description: Automatically capture the system description of a benchmarking machine.
-site_url: https://anandhu-eng.github.io/mlperf-sysinfo/
-repo_url: https://github.com/anandhu-eng/mlperf-sysinfo
-repo_name: anandhu-eng/mlperf-sysinfo
+site_url: https://docs.mlcommons.org/mlperf-sysinfo/
+repo_url: https://github.com/mlcommons/mlperf-sysinfo
+repo_name: mlcommons/mlperf-sysinfo
 edit_uri: edit/main/docs/
 
 theme:
@@ -82,6 +82,6 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/anandhu-eng/mlperf-sysinfo
+      link: https://github.com/mlcommons/mlperf-sysinfo
 
 copyright: Apache-2.0

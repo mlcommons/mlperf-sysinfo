@@ -51,10 +51,10 @@ docs = [
 mlperf-sysinfo = "mlperf_sysinfo.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/anandhu-eng/mlperf-sysinfo"
-Repository = "https://github.com/anandhu-eng/mlperf-sysinfo"
-Documentation = "https://anandhu-eng.github.io/mlperf-sysinfo/"
-Issues = "https://github.com/anandhu-eng/mlperf-sysinfo/issues"
+Homepage = "https://github.com/mlcommons/mlperf-sysinfo"
+Repository = "https://github.com/mlcommons/mlperf-sysinfo"
+Documentation = "https://docs.mlcommons.org/mlperf-sysinfo/"
+Issues = "https://github.com/mlcommons/mlperf-sysinfo/issues"
 
 # mlc-scripts 1.2.0a2 depends on mlcflow>=1.4.0a1, itself a pre-release. pip
 # allows this because the specifiers name pre-releases explicitly; uv needs to

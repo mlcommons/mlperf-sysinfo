@@ -5,7 +5,7 @@ machine, built on top of the
 [mlc-scripts](https://github.com/mlcommons/mlperf-automations) and
 [mlcflow](https://github.com/mlcommons/mlcflow) automation.
 
-**Documentation: <https://anandhu-eng.github.io/mlperf-sysinfo/>**
+**Documentation: <https://docs.mlcommons.org/mlperf-sysinfo/>**
 
 ```bash
 pip install mlperf-sysinfo
@@ -40,7 +40,7 @@ $ mlperf-sysinfo init endpoints
 The sample below is a complete config for a CPU-only capture of the machine
 you're on.
 
-See [The config file](https://anandhu-eng.github.io/mlperf-sysinfo/configuration/)
+See [The config file](https://docs.mlcommons.org/mlperf-sysinfo/configuration/)
 for every option, and for what each working group requires.
 
 ```yaml
