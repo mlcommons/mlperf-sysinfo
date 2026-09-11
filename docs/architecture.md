@@ -48,7 +48,7 @@ the probed truth. What each submitter-supplied field *says* is decided here.
 | `cli.py` / `ui.py` | The command line and its rendering |
 | `errors.py` | Every deliberate failure is one of these |
 
-The `mlc-scripts` dependency is pinned to an exact pre-release, `1.2.0a5`, which
+The `mlc-scripts` dependency is pinned to an exact pre-release, `1.2.0a6`, which
 is the version this package is tested against. `pip` installs it without any
 flag because the specifier names the pre-release explicitly; `uv` needs
 `prerelease = "allow"`, which `pyproject.toml` already sets.
@@ -124,7 +124,7 @@ the run and closes with how it ended:
 ```text
 mlperf-sysinfo capture — 20260819_202120
 Started   : 2026-08-19T20:21:20+05:30
-Versions  : mlperf-sysinfo 1.0.0a8, mlc-scripts 1.2.0a5
+Versions  : mlperf-sysinfo 1.0.0a9, mlc-scripts 1.2.0a6
 Profile   : endpoints (round 6.0, benchmark endpoints)
 Config    : /home/user/sysinfo.yaml
 Output    : /home/user/results/my_run/system_desc.json

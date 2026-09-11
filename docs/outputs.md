@@ -49,7 +49,7 @@ The collection layer can run either from a git checkout or from the installed
 package, so the stamp takes whichever form applies:
 
 ```json
-"mlc_scripts": { "package_version": "1.2.0a5" }
+"mlc_scripts": { "package_version": "1.2.0a6" }
 ```
 
 That is what a `pip install` produces. `mlc-scripts` runs from the installed

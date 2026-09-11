@@ -26,7 +26,7 @@ nothing.
 **The one idea: `mlc-scripts` collects, this package composes.** Probing a
 machine (SSH, CPU/memory/accelerator detection, Redfish, serving-log parsing)
 is shared, unchanged automation, pinned to an exact pre-release
-(`mlc-scripts==1.2.0a5`) that this package is tested against. Every decision
+(`mlc-scripts==1.2.0a6`) that this package is tested against. Every decision
 about what a working group must supply is policy, and lives here instead.
 
 The automation assembles a *different field set per benchmark*, so the
@@ -205,7 +205,7 @@ back out into `output.dir`.
   path in a config file is a path somebody has to keep true. Add them if a
   real `/tmp` turns out to be too small, not before.
 - A node the automation cannot reach fails the whole collection as of
-  mlc-scripts 1.2.0a5, by design upstream. `--allow-partial` therefore drops
+  mlc-scripts 1.2.0a6, by design upstream. `--allow-partial` therefore drops
   unreachable nodes from `ssh_ids` (and drops `serving_node` when that is the
   one that is down) rather than sending them and forgiving the result: there
   is no result to forgive. `nodes_expected` deliberately stays at what the

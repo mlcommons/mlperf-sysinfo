@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlperf-sysinfo"
-version = "1.0.0a8"
+version = "1.0.0a9"
 description = "Automatically capture the system description of a benchmarking machine."
 readme = "README.md"
 license = "Apache-2.0"
@@ -33,9 +33,13 @@ dependencies = [
   # release change either one under a config that has already been validated
   # against this one.
   #
-  # 1.2.0a5 is the first release accepting the remote-provisioning inputs the
-  # `remote:` section forwards (remote_isolated and its two companions); on
-  # 1.2.0a2 they are unknown inputs and go nowhere.
+  # 1.2.0a5 was the first release accepting the remote-provisioning inputs
+  # the `remote:` section forwards (remote_isolated and its companions); on
+  # 1.2.0a2 they are unknown inputs and go nowhere. 1.2.0a6 adds only the
+  # system_name check moving into preprocess, which this package cannot
+  # trigger -- system.name is a required config field, rejected at load long
+  # before a node is contacted -- so the bump is to stay on the tested head
+  # rather than to gain anything.
   #
   # Endpoints is the only profile being exercised against this pin. Its
   # builder in the automation is byte-for-byte identical to 1.2.0a2's, and the
@@ -49,7 +53,7 @@ dependencies = [
   # unblocks the training profile at the automation level and nothing more:
   # it has not been run, and build_training's own guard is still the only
   # thing standing between it and a badly shaped file.
-  "mlc-scripts==1.2.0a5",
+  "mlc-scripts==1.2.0a6",
 ]
 
 [project.optional-dependencies]
@@ -72,7 +76,7 @@ Repository = "https://github.com/mlcommons/mlperf-sysinfo"
 Documentation = "https://docs.mlcommons.org/mlperf-sysinfo/"
 Issues = "https://github.com/mlcommons/mlperf-sysinfo/issues"
 
-# mlc-scripts 1.2.0a5 depends on mlcflow>=1.4.0a4, itself a pre-release. pip
+# mlc-scripts 1.2.0a6 depends on mlcflow>=1.4.0a4, itself a pre-release. pip
 # allows this because the specifiers name pre-releases explicitly; uv needs to
 # be told. This affects uv users only -- `pip install mlperf-sysinfo` resolves
 # without any flag.

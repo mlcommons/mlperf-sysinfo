@@ -6,8 +6,12 @@ under test and work down it.
 
 Everything below was run against **mlperf-sysinfo 1.0.0a8** (mlc-scripts
 1.2.0a5, mlcflow 1.4.0a4) on a single node with **8x NVIDIA H100 80GB HBM3**
-and a Xeon Platinum 8480+, Ubuntu 24.04. Expected values marked *measured* are
-what that machine actually produced — adapt the accelerator counts to yours.
+and a Xeon Platinum 8480+, Ubuntu 24.04. Those are the versions the numbers
+were taken on and are deliberately not bumped with the pin; the current pin is
+mlc-scripts 1.2.0a6, which differs only in rejecting a missing `system_name`
+earlier — a path this package cannot reach, since `system.name` is a required
+config field. Expected values marked *measured* are what that machine actually
+produced — adapt the accelerator counts to yours.
 Values not marked are derived from the code and have not been observed.
 
 Multi-node scenarios reach the same box under three different names. That is a
