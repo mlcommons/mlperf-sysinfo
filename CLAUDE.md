@@ -181,13 +181,19 @@ back out into `output.dir`.
 - Remote scratch is only *mostly* confinable. `remote.isolated` forwards
   mlcflow's `remote_isolated`, which puts the virtualenv and the MLC tree —
   the two large ones — in a `/tmp/mlcflow-isolated-<id>` it deletes on the way
-  out. mlcflow still stages collected files through `~/mlc-remote-artifacts`
-  on each node, outside what the isolated run cleans up, so an isolated run is
-  not yet a run that leaves nothing behind. mlcflow also accepts
-  `remote_isolated_base_dir` and `remote_python_venv`; neither is exposed,
-  deliberately — the defaults are self-contained, and a path in a config file
-  is a path somebody has to keep true. Add them if a real `/tmp` turns out to
-  be too small, not before.
+  out. Verified on mlc2: `~/mlcflow` untouched, no `/tmp/mlcflow-isolated-*`
+  left, trap fires. What it does **not** redirect is the working directory of
+  the remote commands, which is the SSH login directory. So an isolated run
+  still writes `~/system-info.json` (~180 KB, `get-platform-details` defaulting
+  its output dir to `os.getcwd()`) and the per-node JSON at the fixed
+  `/tmp/mlperf-system-info-single-node/mlperf-system-info-single-node-<i>.json`.
+  The fixed name is the dangerous one: files from previous runs are
+  indistinguishable from this run's. Fixing either means an `--outdirname`
+  inside the isolated tree, which lives in mlcflow, not here.
+- mlcflow also accepts `remote_isolated_base_dir` and `remote_python_venv`;
+  neither is exposed, deliberately — the defaults are self-contained, and a
+  path in a config file is a path somebody has to keep true. Add them if a
+  real `/tmp` turns out to be too small, not before.
 - A node the automation cannot reach fails the whole collection as of
   mlc-scripts 1.2.0a5, by design upstream. `--allow-partial` therefore drops
   unreachable nodes from `ssh_ids` (and drops `serving_node` when that is the

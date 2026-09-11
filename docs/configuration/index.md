@@ -87,11 +87,25 @@ Nothing is reused between runs, so every capture reinstalls mlcflow on every
 node. Expect a slower run in exchange for a node that ends as it started, and
 for a capture that cannot be answered by a stale cache entry.
 
-It is not yet a run that leaves *nothing* behind. mlcflow stages the collected
-files through `~/mlc-remote-artifacts` on each node, which is outside the tree
-the isolated run cleans up, so a small amount stays in `$HOME`. Tracked
-upstream. The virtualenv and the MLC tree — the large ones, and the ones that
-go stale — do get removed.
+It is not yet a run that leaves *nothing* behind. Isolation redirects where
+MLC keeps its state; it does not change the directory the remote commands run
+*in*, which is the SSH login directory — normally `$HOME`. Measured on a real
+node, an isolated run still leaves:
+
+| Path (on each node) | What it is |
+| --- | --- |
+| `~/system-info.json` | ~180 KB of raw platform detail, written relative to the login directory |
+| `/tmp/mlperf-system-info-single-node/` | The per-node JSON, at a fixed path under a fixed name |
+| `~/.cache/pip` | pip's own cache, from installing into the throwaway venv |
+
+The last is arguably a feature — it is why the second isolated run is much
+faster than the first. The first two are not, and the per-node file is the one
+to watch: the name is `mlperf-system-info-single-node-<index>.json`, so files
+from previous runs sit alongside this run's and are indistinguishable by name.
+Clear that directory between runs if a node has ever failed mid-capture.
+
+What isolation does remove is the virtualenv and the MLC tree — the large
+ones, and the ones that go stale.
 
 !!! note "Where the throwaway tree goes is not configurable here"
     mlcflow accepts an explicit base directory and an explicit virtualenv
