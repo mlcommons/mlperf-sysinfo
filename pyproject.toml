@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mlperf-sysinfo"
-version = "1.0.0a5"
+version = "1.0.0a6"
 description = "Automatically capture the system description of a benchmarking machine."
 readme = "README.md"
 license = "Apache-2.0"
@@ -33,7 +33,7 @@ dependencies = [
   # training profile cannot collect -- build_training refuses the endpoints
   # field set rather than writing a file of empty hardware. Bump this pin in
   # the same change that marks training ready.
-  "mlc-scripts==1.2.0a2",
+  "mlc-scripts==1.2.0a5",
 ]
 
 [project.optional-dependencies]
