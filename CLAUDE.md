@@ -178,12 +178,16 @@ back out into `output.dir`.
 - Credentials kept in `${VAR}` stay out of the config file and git, but the
   underlying automation prints its own command lines, so a Redfish password
   can still end up in the run log under `.mlperf-sysinfo/`.
-- Remote scratch is only *mostly* confinable. `remote:` forwards mlcflow's
-  `remote_isolated`, `remote_isolated_base_dir` and `remote_python_venv`, which
-  move the virtualenv and the MLC tree — the two large ones — and delete the
-  tree afterwards. mlcflow still stages collected files through
-  `~/mlc-remote-artifacts` on each node, outside what the isolated run cleans
-  up, so an isolated run is not yet a run that leaves nothing behind.
+- Remote scratch is only *mostly* confinable. `remote.isolated` forwards
+  mlcflow's `remote_isolated`, which puts the virtualenv and the MLC tree —
+  the two large ones — in a `/tmp/mlcflow-isolated-<id>` it deletes on the way
+  out. mlcflow still stages collected files through `~/mlc-remote-artifacts`
+  on each node, outside what the isolated run cleans up, so an isolated run is
+  not yet a run that leaves nothing behind. mlcflow also accepts
+  `remote_isolated_base_dir` and `remote_python_venv`; neither is exposed,
+  deliberately — the defaults are self-contained, and a path in a config file
+  is a path somebody has to keep true. Add them if a real `/tmp` turns out to
+  be too small, not before.
 - A node the automation cannot reach fails the whole collection as of
   mlc-scripts 1.2.0a5, by design upstream. `--allow-partial` therefore drops
   unreachable nodes from `ssh_ids` (and drops `serving_node` when that is the

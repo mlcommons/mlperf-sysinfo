@@ -10,6 +10,7 @@ import pytest
 
 from mlperf_sysinfo.config import (
     SshTarget,
+    SysinfoConfig,
     deep_merge,
     dotted_get,
     interpolate_env,
@@ -377,66 +378,45 @@ class TestRemoteSection:
     def test_absent_means_the_long_standing_behaviour(self, good_config_file):
         cfg = load_config(good_config_file)
         assert cfg.remote.isolated is False
-        assert cfg.remote.isolated_base_dir is None
-        assert cfg.remote.python_venv is None
 
-    def test_the_three_settings_round_trip(self, tmp_path):
-        cfg = self._load(
-            tmp_path,
-            {
-                "isolated": True,
-                "isolated_base_dir": "/data/scratch",
-                "python_venv": "/data/scratch/venv",
-            },
-        )
-        assert cfg.remote.isolated is True
-        assert cfg.remote.isolated_base_dir == "/data/scratch"
-        assert cfg.remote.python_venv == "/data/scratch/venv"
+    def test_it_round_trips(self, tmp_path):
+        assert self._load(tmp_path, {"isolated": True}).remote.isolated is True
 
-    def test_paths_are_left_exactly_as_written(self, tmp_path):
-        """These name directories on the *remote*. Resolving one against the
-        config file, or against this machine's cwd, would send a path that
-        means something here and nothing there."""
-        cfg = self._load(
-            tmp_path, {"isolated": True, "isolated_base_dir": "/data/../data/scratch/"}
-        )
-        assert cfg.remote.isolated_base_dir == "/data/../data/scratch/"
+    def test_isolated_is_the_only_key(self, tmp_path):
+        """mlcflow takes a base directory and a virtualenv path too. Neither
+        is exposed: /tmp is self-contained and a path in a config file is a
+        path somebody has to keep true. If that changes, this test is the
+        reminder that the docs and the template say otherwise."""
+        assert set(SysinfoConfig.model_fields["remote"].annotation.model_fields) == {
+            "isolated"
+        }
 
-    def test_a_base_dir_without_isolation_is_refused(self, tmp_path):
-        """mlcflow reads the base directory only inside its isolated branch,
-        so this is not weaker isolation -- it is a line that does nothing."""
-        with pytest.raises(ConfigError) as e:
-            self._load(tmp_path, {"isolated_base_dir": "/data/scratch"})
-        assert "remote.isolated" in str(e.value)
-
-    def test_the_refusal_names_both_ways_forward(self, tmp_path):
-        with pytest.raises(ConfigError) as e:
-            self._load(tmp_path, {"isolated": False, "isolated_base_dir": "/data/scratch"})
-        message = str(e.value)
-        assert "remote.isolated: true" in message
-        assert "remote.python_venv" in message
-
-    def test_a_venv_without_isolation_is_fine(self, tmp_path):
-        """Unlike the base directory, this one applies either way -- it is how
-        you move just the virtualenv off a full home directory."""
-        cfg = self._load(tmp_path, {"python_venv": "/data/scratch/venv"})
-        assert cfg.remote.isolated is False
-        assert cfg.remote.python_venv == "/data/scratch/venv"
+    def test_a_location_is_rejected_rather_than_quietly_dropped(self, tmp_path):
+        """Somebody who read mlcflow's own flags will try these. Being told
+        they are not options beats having them silently do nothing."""
+        for key in ("isolated_base_dir", "python_venv"):
+            with pytest.raises(ConfigError) as e:
+                self._load(tmp_path, {"isolated": True, key: "/data/scratch"})
+            assert "unknown option" in str(e.value)
 
     def test_a_misspelled_remote_option_is_named(self, tmp_path):
         with pytest.raises(ConfigError) as e:
-            self._load(tmp_path, {"isolated": True, "isolated_basedir": "/data/scratch"})
-        assert "isolated_base_dir" in str(e.value)
+            self._load(tmp_path, {"isolatd": True})
+        assert "isolated" in str(e.value)
 
     def test_an_org_default_can_supply_it_through_extends(self, tmp_path):
         """The realistic way this gets set: once, in a shared file, for every
         capture on that cluster."""
-        write_yaml(
-            tmp_path / "org.yaml",
-            {"remote": {"isolated": True, "isolated_base_dir": "/data/scratch"}},
-        )
+        write_yaml(tmp_path / "org.yaml", {"remote": {"isolated": True}})
         data = copy.deepcopy(GOOD_CONFIG)
         data["extends"] = str(tmp_path / "org.yaml")
         cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
         assert cfg.remote.isolated is True
-        assert cfg.remote.isolated_base_dir == "/data/scratch"
+
+    def test_a_child_can_turn_an_inherited_one_back_off(self, tmp_path):
+        write_yaml(tmp_path / "org.yaml", {"remote": {"isolated": True}})
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["extends"] = str(tmp_path / "org.yaml")
+        data["remote"] = {"isolated": False}
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert cfg.remote.isolated is False

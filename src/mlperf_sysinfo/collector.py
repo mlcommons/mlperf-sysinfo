@@ -237,18 +237,15 @@ def build_mlc_kwargs(
     if node_config_file:
         kwargs["node_config_file"] = node_config_file
 
-    # Where the nodes may write. Only sent when actually set: the automation
-    # forwards every non-empty value it is handed, so an unconditional
-    # remote_isolated would put the string "False" in front of mlcflow's
-    # is_true() -- true today by accident of that function's word list, and
-    # not a thing to depend on. config.remote refuses a base directory
-    # without isolation, so these three cannot contradict each other here.
+    # Sent only when asked for, never as a falsy value. The automation
+    # forwards every non-empty string it is handed, so an unconditional
+    # remote_isolated would put "False" in front of mlcflow's is_true() --
+    # which rejects it today by accident of that function's word list, and is
+    # not a thing to depend on. mlcflow picks the location itself: a
+    # /tmp/mlcflow-isolated-<uid> it creates, with the virtualenv inside and
+    # a trap that removes the lot.
     if config.remote.isolated:
         kwargs["remote_isolated"] = "yes"
-    if config.remote.isolated_base_dir:
-        kwargs["remote_isolated_base_dir"] = config.remote.isolated_base_dir
-    if config.remote.python_venv:
-        kwargs["remote_python_venv"] = config.remote.python_venv
 
     # Sent rather than overlaid afterwards: config_summary is a concatenation
     # of the parallelism degrees and these notes, and the automation is what

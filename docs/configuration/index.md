@@ -61,64 +61,47 @@ produces goes into `dir/.mlperf-sysinfo/`. See
 ## `remote` — what the nodes are left holding
 
 Collecting from an SSH node means installing mlcflow on it and leaving an MLC
-tree behind. Unset, both land in the remote user's `$HOME` — the virtualenv at
-`~/mlcflow`, the cache under `~/MLC` — and stay there afterwards, so the next
-run reuses them. On your own hardware that is exactly what you want. On a
-shared login node, on a home directory with a quota, or anywhere a cached
+tree behind. By default both land in the remote user's `$HOME` — the
+virtualenv at `~/mlcflow`, the cache under `~/MLC` — and stay there, so the
+next run reuses them. On your own hardware that is exactly what you want. On
+a shared login node, on a home directory with a quota, or anywhere a cached
 answer could outlive the hardware it describes, it is not.
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `isolated` | bool | `false` | Fresh throwaway MLC tree per run, deleted on the way out |
-| `isolated_base_dir` | path **on the node** | `/tmp` | Where that tree goes. Must already exist |
-| `python_venv` | path **on the node** | `~/mlcflow` | Where the virtualenv goes. Applies with or without isolation |
+| `isolated` | bool | `false` | Throwaway tree per run, under `/tmp`, deleted on the way out |
 
 ```yaml
 remote:
   isolated: true
-  isolated_base_dir: /data/scratch
-  python_venv: /data/scratch/mlcflow-venv
 ```
 
-Both paths are remote paths, sent exactly as written and never resolved
-against this machine. Give absolute ones — a `~` or a relative path is
-interpreted by whatever shell the node hands us, which is not something to
-guess at.
+That is the whole setting. mlcflow picks the location: a fresh
+`/tmp/mlcflow-isolated-<id>` on each node, created `chmod 700`, with the
+virtualenv inside it and both MLC roots pointed at it. A trap removes the lot
+when the run ends, however it ends.
 
-`isolated_base_dir` must exist on every node already. mlcflow fails the node
-rather than creating it, so a typo stops the run instead of quietly writing
-somewhere else.
-
-!!! note "`isolated_base_dir` on its own is refused"
-    mlcflow only reads the base directory when it is actually doing an
-    isolated run, so setting one without `isolated: true` is not milder
-    isolation — it is a line that does nothing:
-
-    ```console
-    $ mlperf-sysinfo check -c sysinfo.yaml
-    error  sysinfo.yaml: config is not valid
-      remote: Value error, remote.isolated_base_dir only applies to an isolated
-        run, and remote.isolated is false. Set remote.isolated: true, or use
-        remote.python_venv to move just the virtualenv.
-    ```
-
-    `python_venv` has no such restriction. It is the setting to reach for when
-    all you need is the virtualenv off a full home directory.
-
-### What isolation costs, and what it still leaves
+### What it costs, and what it still leaves
 
 Nothing is reused between runs, so every capture reinstalls mlcflow on every
 node. Expect a slower run in exchange for a node that ends as it started, and
 for a capture that cannot be answered by a stale cache entry.
 
-It is not yet complete. mlcflow stages the collected files through
-`~/mlc-remote-artifacts` on each node, and that directory is outside the tree
-the isolated run cleans up — so an isolated run still leaves a small amount
-behind in `$HOME`. Tracked upstream; the MLC tree and the virtualenv, which
-are the large ones, do go where you point them.
+It is not yet a run that leaves *nothing* behind. mlcflow stages the collected
+files through `~/mlc-remote-artifacts` on each node, which is outside the tree
+the isolated run cleans up, so a small amount stays in `$HOME`. Tracked
+upstream. The virtualenv and the MLC tree — the large ones, and the ones that
+go stale — do get removed.
 
-These settings apply to the SSH nodes only. The machine running the command
-writes where `output.dir` says, isolated or not.
+!!! note "Where the throwaway tree goes is not configurable here"
+    mlcflow accepts an explicit base directory and an explicit virtualenv
+    path, and this tool does not pass either. `/tmp` is writable, private per
+    run and cleaned up, which covers the case the setting exists for. If your
+    nodes have a `/tmp` too small or too locked down for a virtualenv, say so
+    on the issue tracker — the plumbing is the same and it is a small change.
+
+This applies to the SSH nodes only. The machine running the command writes
+where `output.dir` says, isolated or not.
 
 ## `${VAR}` — secrets stay out of the file
 

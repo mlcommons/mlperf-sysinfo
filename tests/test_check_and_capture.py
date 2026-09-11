@@ -316,9 +316,7 @@ class TestRemoteFootprint:
         invocation it always produced."""
         cfg = load_config(good_config_file)
         kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
-        assert "remote_isolated" not in kwargs
-        assert "remote_isolated_base_dir" not in kwargs
-        assert "remote_python_venv" not in kwargs
+        assert not [k for k in kwargs if k.startswith("remote_")]
 
     def test_isolation_is_sent_as_a_word_mlcflow_reads_as_true(
         self, tmp_path, endpoints_profile
@@ -338,45 +336,27 @@ class TestRemoteFootprint:
         kwargs = self._kwargs(tmp_path, endpoints_profile, {"isolated": False})
         assert "remote_isolated" not in kwargs
 
-    def test_the_base_directory_travels_with_isolation(self, tmp_path, endpoints_profile):
-        kwargs = self._kwargs(
-            tmp_path, endpoints_profile, {"isolated": True, "isolated_base_dir": "/data/scratch"}
-        )
-        assert kwargs["remote_isolated_base_dir"] == "/data/scratch"
-
-    def test_the_venv_path_is_sent_without_isolation(self, tmp_path, endpoints_profile):
-        kwargs = self._kwargs(
-            tmp_path, endpoints_profile, {"python_venv": "/data/scratch/venv"}
-        )
-        assert kwargs["remote_python_venv"] == "/data/scratch/venv"
-        assert "remote_isolated" not in kwargs
-
-    def test_the_input_names_are_the_automations_own(self, tmp_path, endpoints_profile):
-        """These three keys are input_mapping entries in the automation's
+    def test_the_input_name_is_the_automations_own(self, tmp_path, endpoints_profile):
+        """remote_isolated is an input_mapping entry in the automation's
         meta.yaml. A renamed one is not an error anywhere -- it is silently
         dropped, and the nodes go on writing to $HOME."""
-        kwargs = self._kwargs(
-            tmp_path,
-            endpoints_profile,
-            {
-                "isolated": True,
-                "isolated_base_dir": "/data/scratch",
-                "python_venv": "/data/scratch/venv",
-            },
-        )
-        assert {"remote_isolated", "remote_isolated_base_dir", "remote_python_venv"} <= set(
-            kwargs
-        )
+        kwargs = self._kwargs(tmp_path, endpoints_profile, {"isolated": True})
+        assert "remote_isolated" in kwargs
 
-    def test_they_are_inputs_and_never_variations(self, tmp_path, endpoints_profile):
+    def test_it_is_an_input_and_never_a_variation(self, tmp_path, endpoints_profile):
         """Isolation is not a tag. Appending _remote_isolated to the tag
         string would make mlcflow look for a variation that does not exist."""
-        kwargs = self._kwargs(
-            tmp_path,
-            endpoints_profile,
-            {"isolated": True, "isolated_base_dir": "/data/scratch"},
-        )
+        kwargs = self._kwargs(tmp_path, endpoints_profile, {"isolated": True})
         assert "isolated" not in kwargs["tags"]
+
+    def test_no_location_is_sent_with_it(self, tmp_path, endpoints_profile):
+        """mlcflow chooses /tmp/mlcflow-isolated-<id> and puts the venv
+        inside it. Sending a base directory would also make it mandatory that
+        the directory already exists on every node, which is the failure this
+        avoids entirely."""
+        kwargs = self._kwargs(tmp_path, endpoints_profile, {"isolated": True})
+        assert "remote_isolated_base_dir" not in kwargs
+        assert "remote_python_venv" not in kwargs
 
 
 class _FakeMlc:
