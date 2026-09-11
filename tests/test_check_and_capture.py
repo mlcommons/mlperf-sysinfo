@@ -25,6 +25,18 @@ def endpoints_profile():
     return profiles.load("endpoints")
 
 
+def _only_node2_answers(monkeypatch):
+    """node1 is down, node2 is up. A genuine partial, rather than the total
+    blackout that every node failing actually is."""
+    monkeypatch.setattr(
+        check_mod,
+        "check_node",
+        lambda t, a: NodeStatus(t, t.host != "node1", "timed out" if t.host == "node1" else "ok"),
+    )
+    monkeypatch.setattr(check_mod, "probe_endpoint", lambda u: ProbeStatus(u, True, ""))
+    monkeypatch.setattr(check_mod, "check_serving_log", lambda t, p: ProbeStatus(p, True, ""))
+
+
 @pytest.fixture
 def all_reachable(monkeypatch):
     monkeypatch.setattr(
@@ -288,6 +300,85 @@ class TestMlcInvocation:
         assert "_redfish" not in kwargs["tags"]
 
 
+class TestRemoteFootprint:
+    """remote: reaches the automation, or it is a config section that lies."""
+
+    def _kwargs(self, tmp_path, endpoints_profile, remote):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["remote"] = remote
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        return build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+
+    def test_nothing_is_sent_when_the_section_is_absent(
+        self, good_config_file, endpoints_profile, tmp_path
+    ):
+        """The whole promise of the default: an existing config produces the
+        invocation it always produced."""
+        cfg = load_config(good_config_file)
+        kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+        assert "remote_isolated" not in kwargs
+        assert "remote_isolated_base_dir" not in kwargs
+        assert "remote_python_venv" not in kwargs
+
+    def test_isolation_is_sent_as_a_word_mlcflow_reads_as_true(
+        self, tmp_path, endpoints_profile
+    ):
+        """mlcflow runs the value through is_true(), whose vocabulary is
+        1/true/on/yes. A Python bool would arrive as "True" and happen to
+        work; "yes" is in that list on purpose rather than by luck."""
+        kwargs = self._kwargs(tmp_path, endpoints_profile, {"isolated": True})
+        assert kwargs["remote_isolated"] == "yes"
+
+    def test_isolation_off_sends_nothing_rather_than_a_falsy_string(
+        self, tmp_path, endpoints_profile
+    ):
+        """The automation forwards every non-empty value it is handed, and
+        "False" is non-empty. is_true() rejects it today; the way not to
+        depend on that is not to send it."""
+        kwargs = self._kwargs(tmp_path, endpoints_profile, {"isolated": False})
+        assert "remote_isolated" not in kwargs
+
+    def test_the_base_directory_travels_with_isolation(self, tmp_path, endpoints_profile):
+        kwargs = self._kwargs(
+            tmp_path, endpoints_profile, {"isolated": True, "isolated_base_dir": "/data/scratch"}
+        )
+        assert kwargs["remote_isolated_base_dir"] == "/data/scratch"
+
+    def test_the_venv_path_is_sent_without_isolation(self, tmp_path, endpoints_profile):
+        kwargs = self._kwargs(
+            tmp_path, endpoints_profile, {"python_venv": "/data/scratch/venv"}
+        )
+        assert kwargs["remote_python_venv"] == "/data/scratch/venv"
+        assert "remote_isolated" not in kwargs
+
+    def test_the_input_names_are_the_automations_own(self, tmp_path, endpoints_profile):
+        """These three keys are input_mapping entries in the automation's
+        meta.yaml. A renamed one is not an error anywhere -- it is silently
+        dropped, and the nodes go on writing to $HOME."""
+        kwargs = self._kwargs(
+            tmp_path,
+            endpoints_profile,
+            {
+                "isolated": True,
+                "isolated_base_dir": "/data/scratch",
+                "python_venv": "/data/scratch/venv",
+            },
+        )
+        assert {"remote_isolated", "remote_isolated_base_dir", "remote_python_venv"} <= set(
+            kwargs
+        )
+
+    def test_they_are_inputs_and_never_variations(self, tmp_path, endpoints_profile):
+        """Isolation is not a tag. Appending _remote_isolated to the tag
+        string would make mlcflow look for a variation that does not exist."""
+        kwargs = self._kwargs(
+            tmp_path,
+            endpoints_profile,
+            {"isolated": True, "isolated_base_dir": "/data/scratch"},
+        )
+        assert "isolated" not in kwargs["tags"]
+
+
 class _FakeMlc:
     """Stands in for mlc.access: writes the intermediate the real one would."""
 
@@ -362,9 +453,7 @@ class TestCapture:
     def test_allow_partial_proceeds_and_marks_the_output(
         self, good_config_file, endpoints_profile, monkeypatch, fake_mlc
     ):
-        monkeypatch.setattr(check_mod, "check_node", lambda t, a: NodeStatus(t, False, "timed out"))
-        monkeypatch.setattr(check_mod, "probe_endpoint", lambda u: ProbeStatus(u, True, ""))
-        monkeypatch.setattr(check_mod, "check_serving_log", lambda t, p: ProbeStatus(p, True, ""))
+        _only_node2_answers(monkeypatch)
         cfg = load_config(good_config_file)
         result = capture(cfg, endpoints_profile, allow_partial=True)
         assert not result.complete
@@ -490,3 +579,86 @@ class TestCollectionIsVerified:
         result = capture(load_config(good_config_file), endpoints_profile)
         assert result.complete
         assert result.nodes_collected == 2 == result.nodes_expected
+
+
+class TestPartialNarrowsTheRequest:
+    """--allow-partial has to mean "do not ask that node", not "ignore what it
+    said". Since mlc-scripts 1.2.0a5 a node the automation cannot reach fails
+    the whole collection, so forgiving the answer afterwards is no longer a
+    thing that can happen -- there is no answer, there is an error."""
+
+    def test_an_unreachable_node_is_left_out_of_ssh_ids(
+        self, good_config_file, endpoints_profile, monkeypatch, fake_mlc
+    ):
+        _only_node2_answers(monkeypatch)
+        cfg = load_config(good_config_file)
+        capture(cfg, endpoints_profile, allow_partial=True)
+        assert fake_mlc.calls[0]["ssh_ids"] == "root@node2:2222"
+
+    def test_the_serving_node_goes_too_when_it_is_the_one_that_is_down(
+        self, good_config_file, endpoints_profile, monkeypatch, fake_mlc
+    ):
+        """GOOD_CONFIG serves from node1. Fetching its config is a second ssh
+        round trip, and an equally fatal one."""
+        _only_node2_answers(monkeypatch)
+        cfg = load_config(good_config_file)
+        assert cfg.serving.node == "root@node1"
+        capture(cfg, endpoints_profile, allow_partial=True)
+        assert "serving_node" not in fake_mlc.calls[0]
+
+    def test_a_reachable_serving_node_is_still_asked(
+        self, tmp_path, endpoints_profile, monkeypatch, fake_mlc
+    ):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["serving"]["node"] = "root@node2:2222"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        _only_node2_answers(monkeypatch)
+        capture(cfg, endpoints_profile, allow_partial=True)
+        assert fake_mlc.calls[0]["serving_node"] == "root@node2:2222"
+
+    def test_the_count_still_reports_against_what_was_configured(
+        self, good_config_file, endpoints_profile, monkeypatch, fake_mlc
+    ):
+        """Narrowing the request must not narrow the expectation too, or a
+        partial capture would describe itself as complete."""
+        _only_node2_answers(monkeypatch)
+        cfg = load_config(good_config_file)
+        result = capture(cfg, endpoints_profile, allow_partial=True)
+        assert result.nodes_expected == 2
+        assert not result.complete
+
+    def test_every_node_down_is_not_a_partial_capture(
+        self, good_config_file, endpoints_profile, monkeypatch, fake_mlc
+    ):
+        """With nothing left to ask and include_local false, the old code sent
+        an empty ssh_ids list and let the automation explain. Say it here,
+        where the reason is known."""
+        monkeypatch.setattr(check_mod, "check_node", lambda t, a: NodeStatus(t, False, "timed out"))
+        monkeypatch.setattr(check_mod, "probe_endpoint", lambda u: ProbeStatus(u, True, ""))
+        monkeypatch.setattr(check_mod, "check_serving_log", lambda t, p: ProbeStatus(p, True, ""))
+        cfg = load_config(good_config_file)
+        with pytest.raises(CheckFailed, match="nothing left to collect from"):
+            capture(cfg, endpoints_profile, allow_partial=True)
+        assert fake_mlc.calls == [], "nothing should have been collected"
+
+    def test_the_local_machine_alone_is_enough_to_go_on(
+        self, tmp_path, endpoints_profile, monkeypatch, fake_mlc
+    ):
+        """Same blackout, but this machine is part of the system. There is
+        still something to describe."""
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["nodes"]["include_local"] = True
+        data["serving"].pop("node")
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        monkeypatch.setattr(check_mod, "check_node", lambda t, a: NodeStatus(t, False, "timed out"))
+        monkeypatch.setattr(check_mod, "probe_endpoint", lambda u: ProbeStatus(u, True, ""))
+        capture(cfg, endpoints_profile, allow_partial=True)
+        assert fake_mlc.calls[0]["ssh_ids"] == ""
+        assert "_exclude_current_node" not in fake_mlc.calls[0]["tags"]
+
+    def test_a_complete_run_asks_for_every_node(
+        self, good_config_file, endpoints_profile, all_reachable, fake_mlc
+    ):
+        cfg = load_config(good_config_file)
+        capture(cfg, endpoints_profile)
+        assert fake_mlc.calls[0]["ssh_ids"] == "root@node1:22,root@node2:2222"

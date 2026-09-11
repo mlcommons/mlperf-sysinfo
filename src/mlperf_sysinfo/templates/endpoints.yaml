@@ -35,6 +35,15 @@ nodes:
   #   decode:
   #     - { match: NVIDIA H100, count: 5 }
 
+# Optional. What the SSH nodes are left holding. Unset, mlcflow installs
+# itself at ~/mlcflow on each node and keeps its cache under ~/MLC, both of
+# which survive the run. Set these where $HOME is shared, small, or simply
+# not the volume you want written to. Both paths are paths on the *node*.
+# remote:
+#   isolated: true                     # throwaway tree per run, removed after
+#   isolated_base_dir: /data/scratch   # where it goes; must already exist
+#   python_venv: /data/scratch/venv    # applies with or without isolation
+
 serving:
   # The endpoint under test, and also probed for the framework name/version.
   # Rules 8.2 allow a description instead of a URL, for a hosted endpoint with

@@ -24,7 +24,7 @@ from typing import Any
 import yaml
 
 from . import __version__, logs
-from .config import SysinfoConfig
+from .config import SshTarget, SysinfoConfig
 from .errors import CaptureError, CheckFailed, DependencyMissing
 from .preflight import CheckReport, NodeStatus, run_check
 from .profiles import Profile
@@ -169,8 +169,14 @@ def build_mlc_kwargs(
     *,
     node_config_file: str | None = None,
     run_metadata_path: Path | None = None,
+    targets: list[SshTarget] | None = None,
 ) -> dict[str, Any]:
     """Translate the config into one automation-script invocation.
+
+    ``targets`` is which machines to actually ask for, defaulting to every one
+    the config names. ``capture`` narrows it under ``--allow-partial``; see
+    there for why an unreachable node has to be left out rather than sent and
+    forgiven afterwards.
 
     The profile's ``benchmark`` variation selects which field set the
     automation assembles. It has to be sent: since mlc-scripts 1.2.0a2 the
@@ -184,6 +190,9 @@ def build_mlc_kwargs(
     automation's own defaults are placeholder strings ("Insert ... here"), and
     those must never reach a deliverable.
     """
+    if targets is None:
+        targets = config.all_targets
+
     tags = ["get-mlperf-multi-node-system-info"]
     if config.system.accelerator != "none":
         tags.append(f"_{config.system.accelerator}")
@@ -200,7 +209,7 @@ def build_mlc_kwargs(
         "action": "run",
         "automation": "script",
         "tags": ",".join(tags),
-        "ssh_ids": ",".join(str(t) for t in config.all_targets),
+        "ssh_ids": ",".join(str(t) for t in targets),
         "out_dir_path": str(out_dir.resolve()),
         "out_file_name": RAW_FILENAME,
         "skip_ssh_key_file": "yes" if config.nodes.ssh_key_preconfigured else "",
@@ -214,12 +223,32 @@ def build_mlc_kwargs(
     # quietly.
     if profile.collect.endpoint_probe and config.serving.url:
         kwargs["endpoint_url"] = config.serving.url
-    if profile.collect.serving_log and config.serving.node:
+    # Fetching the serving config is its own ssh round trip, and since
+    # mlc-scripts 1.2.0a5 a failed one ends the run. Asking for it from a node
+    # we have already dropped as unreachable would turn a partial capture back
+    # into a total failure, by the one route --allow-partial exists to avoid.
+    serving_collectable = config.serving.node and (
+        SshTarget.parse(config.serving.node) in targets
+    )
+    if profile.collect.serving_log and serving_collectable:
         kwargs["serving_node"] = config.serving.node
         kwargs["log_path"] = config.serving.log
         kwargs["serving_framework_type"] = config.serving.framework
     if node_config_file:
         kwargs["node_config_file"] = node_config_file
+
+    # Where the nodes may write. Only sent when actually set: the automation
+    # forwards every non-empty value it is handed, so an unconditional
+    # remote_isolated would put the string "False" in front of mlcflow's
+    # is_true() -- true today by accident of that function's word list, and
+    # not a thing to depend on. config.remote refuses a base directory
+    # without isolation, so these three cannot contradict each other here.
+    if config.remote.isolated:
+        kwargs["remote_isolated"] = "yes"
+    if config.remote.isolated_base_dir:
+        kwargs["remote_isolated_base_dir"] = config.remote.isolated_base_dir
+    if config.remote.python_venv:
+        kwargs["remote_python_venv"] = config.remote.python_venv
 
     # Sent rather than overlaid afterwards: config_summary is a concatenation
     # of the parallelism degrees and these notes, and the automation is what
@@ -285,6 +314,24 @@ def capture(
         )
 
     partial = report.has_reach_problems
+
+    # An unreachable node is dropped from the request, not sent and forgiven
+    # afterwards. Since mlc-scripts 1.2.0a5 the automation treats a node it
+    # cannot reach as a failed run and returns an error for the whole
+    # collection -- deliberately, because a system description quietly missing
+    # a machine is a wrong answer rather than a small one. That is the right
+    # default and it is not what --allow-partial promises, so the flag has to
+    # mean "do not ask about that node" instead of "ignore what it said".
+    unreachable = {node.target for node in report.unreachable}
+    targets = [t for t in config.all_targets if t not in unreachable]
+    if not targets and not config.nodes.include_local:
+        names = ", ".join(n.label for n in report.unreachable)
+        raise CheckFailed(
+            f"every node is unreachable ({names}), and nodes.include_local is "
+            "false -- there is nothing left to collect from. --allow-partial "
+            "forgives some of the nodes, not all of them.",
+            report,
+        )
     log.info(
         "pre-flight check %s -- %d node(s), profile %s",
         "passed" if not partial else "passed with warnings",
@@ -325,6 +372,7 @@ def capture(
             work_dir,
             node_config_file=node_config_file,
             run_metadata_path=run_metadata_path,
+            targets=targets,
         )
 
         mlc = _require_mlc()

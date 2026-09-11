@@ -277,6 +277,64 @@ class NodesConfig(BaseModel):
         return [SshTarget.parse(s) for s in self.ssh]
 
 
+class RemoteConfig(BaseModel):
+    """What may be written on an SSH node, and what survives the run.
+
+    Collecting from a node means installing mlcflow there and leaving an MLC
+    tree behind. Unset, both land in the remote user's ``$HOME`` -- the
+    virtualenv at ``~/mlcflow``, the cache under ``~/MLC`` -- and stay there
+    afterwards, to be reused by the next run. That is a reasonable default and
+    a bad one on a shared login node, on a small or quota-ed home volume, or
+    anywhere a reused cache could answer for hardware that has since changed.
+
+    These settings apply to the SSH nodes only. The machine running the
+    command writes where ``output.dir`` says, isolated or not.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    isolated: bool = Field(
+        default=False,
+        description=(
+            "Give the run its own throwaway MLC tree on each node and delete "
+            "it on the way out. Nothing is reused between runs, so every "
+            "capture pays for a fresh install -- slower, in exchange for "
+            "leaving no state and reading no stale cache entry."
+        ),
+    )
+    isolated_base_dir: str | None = Field(
+        default=None,
+        description=(
+            "Absolute path on each node to put the throwaway tree under; "
+            "``/tmp`` if unset. The path must already exist -- mlcflow fails "
+            "the node rather than creating it, so a typo stops the run "
+            "instead of quietly writing somewhere else."
+        ),
+    )
+    python_venv: str | None = Field(
+        default=None,
+        description=(
+            "Absolute path on each node for the mlcflow virtualenv; "
+            "``~/mlcflow`` if unset, or a directory inside the throwaway tree "
+            "when isolated is set. Unlike the other two this applies with or "
+            "without isolation, and is the way to move just the virtualenv "
+            "off a full home directory."
+        ),
+    )
+
+    def model_post_init(self, _context: Any) -> None:
+        # mlcflow reads the base directory only inside its isolated branch, so
+        # setting one without isolation is not a smaller version of isolation
+        # -- it is a line that does nothing, in the section whose whole purpose
+        # is controlling where the writes go.
+        if self.isolated_base_dir and not self.isolated:
+            raise ValueError(
+                "remote.isolated_base_dir only applies to an isolated run, and "
+                "remote.isolated is false. Set remote.isolated: true, or use "
+                "remote.python_venv to move just the virtualenv."
+            )
+
+
 class ServingConfig(BaseModel):
     """The stack under test."""
 
@@ -432,6 +490,7 @@ class SysinfoConfig(BaseModel):
     output: OutputConfig = Field(default_factory=OutputConfig)
     system: SystemConfig
     nodes: NodesConfig = Field(default_factory=NodesConfig)
+    remote: RemoteConfig = Field(default_factory=RemoteConfig)
     serving: ServingConfig = Field(default_factory=ServingConfig)
     training: TrainingConfig = Field(default_factory=TrainingConfig)
     power: PowerConfig = Field(default_factory=PowerConfig)

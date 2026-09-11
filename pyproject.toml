@@ -28,11 +28,27 @@ dependencies = [
   "pydantic>=2.7",
   "PyYAML>=6.0",
   "cyclopts>=3.0",
-  # 1.2.0a2 has _endpoints and _inference but NOT _training: that variation is
-  # mlperf-automations#1101, still open. Until a release carries it, the
-  # training profile cannot collect -- build_training refuses the endpoints
-  # field set rather than writing a file of empty hardware. Bump this pin in
-  # the same change that marks training ready.
+  # Pinned exactly rather than floored. What this package composes is the
+  # automation's field sets and input names, and a floor would let a later
+  # release change either one under a config that has already been validated
+  # against this one.
+  #
+  # 1.2.0a5 is the first release accepting the remote-provisioning inputs the
+  # `remote:` section forwards (remote_isolated and its two companions); on
+  # 1.2.0a2 they are unknown inputs and go nowhere.
+  #
+  # Endpoints is the only profile being exercised against this pin. Its
+  # builder in the automation is byte-for-byte identical to 1.2.0a2's, and the
+  # single-node collector every profile shares did not change at all, so the
+  # field set is the one already tested. What did change is that a node the
+  # automation cannot reach now fails the whole collection instead of being
+  # logged and skipped -- see collector.capture, which drops unreachable nodes
+  # from the request so --allow-partial still means what it says.
+  #
+  # 1.2.0a5 also carries the _training variation that 1.2.0a2 lacked. That
+  # unblocks the training profile at the automation level and nothing more:
+  # it has not been run, and build_training's own guard is still the only
+  # thing standing between it and a badly shaped file.
   "mlc-scripts==1.2.0a5",
 ]
 
@@ -56,7 +72,7 @@ Repository = "https://github.com/mlcommons/mlperf-sysinfo"
 Documentation = "https://docs.mlcommons.org/mlperf-sysinfo/"
 Issues = "https://github.com/mlcommons/mlperf-sysinfo/issues"
 
-# mlc-scripts 1.2.0a2 depends on mlcflow>=1.4.0a1, itself a pre-release. pip
+# mlc-scripts 1.2.0a5 depends on mlcflow>=1.4.0a4, itself a pre-release. pip
 # allows this because the specifiers name pre-releases explicitly; uv needs to
 # be told. This affects uv users only -- `pip install mlperf-sysinfo` resolves
 # without any flag.

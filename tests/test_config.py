@@ -364,3 +364,79 @@ class TestDottedGet:
         cfg = load_config(good_config_file)
         assert dotted_get(cfg, "submission.notes.nope") is None
         assert dotted_get(cfg, "no.such.thing") is None
+
+
+class TestRemoteSection:
+    """What the tool is allowed to leave behind on an SSH node."""
+
+    def _load(self, tmp_path, remote):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["remote"] = remote
+        return load_config(write_yaml(tmp_path / "c.yaml", data))
+
+    def test_absent_means_the_long_standing_behaviour(self, good_config_file):
+        cfg = load_config(good_config_file)
+        assert cfg.remote.isolated is False
+        assert cfg.remote.isolated_base_dir is None
+        assert cfg.remote.python_venv is None
+
+    def test_the_three_settings_round_trip(self, tmp_path):
+        cfg = self._load(
+            tmp_path,
+            {
+                "isolated": True,
+                "isolated_base_dir": "/data/scratch",
+                "python_venv": "/data/scratch/venv",
+            },
+        )
+        assert cfg.remote.isolated is True
+        assert cfg.remote.isolated_base_dir == "/data/scratch"
+        assert cfg.remote.python_venv == "/data/scratch/venv"
+
+    def test_paths_are_left_exactly_as_written(self, tmp_path):
+        """These name directories on the *remote*. Resolving one against the
+        config file, or against this machine's cwd, would send a path that
+        means something here and nothing there."""
+        cfg = self._load(
+            tmp_path, {"isolated": True, "isolated_base_dir": "/data/../data/scratch/"}
+        )
+        assert cfg.remote.isolated_base_dir == "/data/../data/scratch/"
+
+    def test_a_base_dir_without_isolation_is_refused(self, tmp_path):
+        """mlcflow reads the base directory only inside its isolated branch,
+        so this is not weaker isolation -- it is a line that does nothing."""
+        with pytest.raises(ConfigError) as e:
+            self._load(tmp_path, {"isolated_base_dir": "/data/scratch"})
+        assert "remote.isolated" in str(e.value)
+
+    def test_the_refusal_names_both_ways_forward(self, tmp_path):
+        with pytest.raises(ConfigError) as e:
+            self._load(tmp_path, {"isolated": False, "isolated_base_dir": "/data/scratch"})
+        message = str(e.value)
+        assert "remote.isolated: true" in message
+        assert "remote.python_venv" in message
+
+    def test_a_venv_without_isolation_is_fine(self, tmp_path):
+        """Unlike the base directory, this one applies either way -- it is how
+        you move just the virtualenv off a full home directory."""
+        cfg = self._load(tmp_path, {"python_venv": "/data/scratch/venv"})
+        assert cfg.remote.isolated is False
+        assert cfg.remote.python_venv == "/data/scratch/venv"
+
+    def test_a_misspelled_remote_option_is_named(self, tmp_path):
+        with pytest.raises(ConfigError) as e:
+            self._load(tmp_path, {"isolated": True, "isolated_basedir": "/data/scratch"})
+        assert "isolated_base_dir" in str(e.value)
+
+    def test_an_org_default_can_supply_it_through_extends(self, tmp_path):
+        """The realistic way this gets set: once, in a shared file, for every
+        capture on that cluster."""
+        write_yaml(
+            tmp_path / "org.yaml",
+            {"remote": {"isolated": True, "isolated_base_dir": "/data/scratch"}},
+        )
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["extends"] = str(tmp_path / "org.yaml")
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        assert cfg.remote.isolated is True
+        assert cfg.remote.isolated_base_dir == "/data/scratch"

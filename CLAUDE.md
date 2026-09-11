@@ -26,7 +26,7 @@ nothing.
 **The one idea: `mlc-scripts` collects, this package composes.** Probing a
 machine (SSH, CPU/memory/accelerator detection, Redfish, serving-log parsing)
 is shared, unchanged automation, pinned to an exact pre-release
-(`mlc-scripts==1.2.0a2`) that this package is tested against. Every decision
+(`mlc-scripts==1.2.0a5`) that this package is tested against. Every decision
 about what a working group must supply is policy, and lives here instead.
 
 The automation assembles a *different field set per benchmark*, so the
@@ -66,7 +66,7 @@ profile and no collection change.
 ### Config and profiles
 
 - `SysinfoConfig` (`config.py`) is the whole config file: `system`, `nodes`,
-  `serving`, `power`, `submission`, `run`, plus `extends` for shared defaults
+  `remote`, `serving`, `power`, `submission`, `run`, plus `extends` for shared defaults
   and `${VAR}` for secrets that must never be written to disk. A section or list
   whose entries are all commented out parses as `None`; `config.drop_empty_sections`
   turns it into an empty container, driven by the schema so that an unset
@@ -178,6 +178,15 @@ back out into `output.dir`.
 - Credentials kept in `${VAR}` stay out of the config file and git, but the
   underlying automation prints its own command lines, so a Redfish password
   can still end up in the run log under `.mlperf-sysinfo/`.
-- Remote scratch files from SSH collection are not confined — the automation
-  writes its own temp files under `$HOME`/`/tmp` on each remote node, and this
-  package's environment doesn't propagate over that SSH leg to redirect them.
+- Remote scratch is only *mostly* confinable. `remote:` forwards mlcflow's
+  `remote_isolated`, `remote_isolated_base_dir` and `remote_python_venv`, which
+  move the virtualenv and the MLC tree — the two large ones — and delete the
+  tree afterwards. mlcflow still stages collected files through
+  `~/mlc-remote-artifacts` on each node, outside what the isolated run cleans
+  up, so an isolated run is not yet a run that leaves nothing behind.
+- A node the automation cannot reach fails the whole collection as of
+  mlc-scripts 1.2.0a5, by design upstream. `--allow-partial` therefore drops
+  unreachable nodes from `ssh_ids` (and drops `serving_node` when that is the
+  one that is down) rather than sending them and forgiving the result: there
+  is no result to forgive. `nodes_expected` deliberately stays at what the
+  config asked for, so the capture still reports itself as partial.
