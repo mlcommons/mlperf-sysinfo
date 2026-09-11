@@ -124,7 +124,7 @@ the run and closes with how it ended:
 ```text
 mlperf-sysinfo capture — 20260819_202120
 Started   : 2026-08-19T20:21:20+05:30
-Versions  : mlperf-sysinfo 1.0.0a6, mlc-scripts 1.2.0a5
+Versions  : mlperf-sysinfo 1.0.0a7, mlc-scripts 1.2.0a5
 Profile   : endpoints (round 6.0, benchmark endpoints)
 Config    : /home/user/sysinfo.yaml
 Output    : /home/user/results/my_run/system_desc.json
