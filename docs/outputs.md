@@ -64,8 +64,17 @@ mixed-version run stays visible rather than hidden.
 ## `endpoints` — grouped
 
 The field set defined by [endpoints rules
-8.2](https://github.com/mlcommons/endpoints_policies/blob/main/endpoints_rules.md),
-in the order of the 8.2.1 template. `node_types` keeps multi-node and
+8.2](https://github.com/mlcommons/endpoints_policies/blob/v1.0_rules_dev/endpoints_rules.md#82-system-description-system_desc_idjson),
+in the order of the 8.2.1 template.
+
+!!! warning "Which version of the rules"
+    That link points at the **`v1.0_rules_dev`** branch, deliberately. §8.2 on
+    `main` is a different and much smaller thing — six fields layered on the
+    general submission rules, naming `publication_status` and
+    `benchmark_model`, neither of which this tool writes — and it has no 8.2.1
+    template at all. The 50-field table and its template exist only on the dev
+    branch, and that is what is implemented here. Revisit this when v1.0
+    lands on `main`. `node_types` keeps multi-node and
 disaggregated systems legible, with one entry per node type, each with its own
 hardware and a `number_of_nodes` count. `accelerator_info` nests the
 accelerators inside it, so a node type holding more than one accelerator model
@@ -141,12 +150,39 @@ here and are not any more:
 
 | Was in the file | Where it is now |
 | --- | --- |
-| `model_name`, `model_precision`, `link_to_model`, `link_to_model_transformation`, `model_notes`, `dataset_name`, `dataset_type`, `dataset_link`, `max_supported_concurrency` | Measurement point metadata (rules 8.3), in each point's `points/<point>/config.yml`. This tool does not write that file |
+| `model_name`, `model_precision`, `link_to_model`, `link_to_model_transformation`, `model_notes`, `dataset_name`, `dataset_type`, `dataset_link`, `max_supported_concurrency` | Measurement point metadata (rules 8.3), in each point's `points/<point>/config.yml`. This tool does not write that file. See the note below on `max_supported_concurrency` |
 | `submitter_org_names`, `submitter_contact`, `submission_id`, `submission_date`, `publish_date`, `measured_accuracy_score`, `system_type_detail`, `input_token_average`, `output_token_average` | Dropped from the field table |
 
 `hw_notes`, `sw_notes`, `other_hardware`, `cooling` and `container_link` are
 still written, but per node type rather than once at the top level. The same
 config value is copied onto every entry.
+
+### Conformance to the 8.2.1 template
+
+Checked against the template on `v1.0_rules_dev` with a real three-node
+capture: **49 of its 50 fields are present**, the top-level key order matches,
+and the `node_types[]` and `accelerator_info[]` key orders match exactly. The
+only key this tool adds is the single namespaced `mlperf_sysinfo` block.
+
+Two fields need a word, because both are places where the rules disagree with
+themselves rather than places where the tool is behind.
+
+**`tps_utilization` is in the template and is not written.** It is defined as
+`reported_system_tps / (max of all reported_system_tps for all runs)` — a
+ratio over every run in the submission. Nothing a system-description capture
+can see determines it. Writing `0` to fill the slot would put a number that
+means "this system achieved nothing" into a submission field, which is the
+one thing this tool will not do. Add it when you assemble the submission.
+
+**`max_supported_concurrency` is required in this file by §9.1 and has no
+slot in the 8.2.1 template.** The compliance validator's *Max concurrency
+declared* check reads C<sub>max</sub> > 32 "declared in `system_desc_id.json`"
+and rejects the submission if it is absent — but the field appears only in the
+§8.2 and §8.3 *tables*, not in the template that defines the file's contents,
+and §8.3 already carries a `<!-- TODO: pending placement review -->` on
+`division` for the same overlap. This tool follows the template and omits it.
+If your submission is rejected on that check, that is why, and it is a
+question for the working group rather than a setting here.
 
 !!! info "\"N/A\" is an answer, and it is left alone"
     Where a probe looked and found nothing it writes `N/A` or

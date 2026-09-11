@@ -480,10 +480,15 @@ batch               256    disaggregated      0
 config_summary      'TP 8'
 ```
 
-`config_summary` showing only `TP 8` is what the tool produces; the standalone
-parser summarises the same log as `EP 1, PP 1, TP 8, DP 1`. Both are the
-current behaviour, and the disagreement is worth a look but is not a failure of
-this test.
+`config_summary` showing only `TP 8` is correct, and the disagreement with the
+standalone parser is worth knowing about. Rules 8.2 define the field as a
+concatenation of the parallelism degrees "**where these fields are > 1**", so
+dropping `EP 1`, `PP 1` and `DP 1` is the specified behaviour. Run
+`get-mlperf-serving-config/parse.py` on the same log directly and it reports
+`EP 1, PP 1, TP 8, DP 1` — including the degrees equal to 1, and in a
+different order from the one the rules list (disaggregated, TP, PP, EP, DP).
+The deliverable is right; the standalone summary is not. Assert on the
+deliverable.
 
 Repeat with `sglang` and `trtllm` — start the fake server in that mode and
 point `serving.log` at the matching log. **Framework detection alone**, without

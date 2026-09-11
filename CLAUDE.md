@@ -74,7 +74,17 @@ profile and no collection change.
   those mean "unset" and "not configured", not "empty".
 - Model, dataset and concurrency details are **not** config fields. For
   Endpoints they are measurement point metadata (rules 8.3,
-  `points/<point>/config.yml`), which this tool does not write.
+  `points/<point>/config.yml`), which this tool does not write. One exception
+  is unsettled: `max_supported_concurrency` is in the §8.2 table, the §8.3
+  table, and §9.1's validator check — which reads it from
+  `system_desc_id.json` and rejects the submission when it is missing — but
+  it is *not* in the 8.2.1 template this tool implements. Left out, and
+  documented in `docs/outputs.md`; do not add it without the working group
+  settling where it lives.
+- The rules are cited at the **`v1.0_rules_dev`** branch, not `main`. `main`'s
+  §8.2 is a six-field delta over the general submission rules using
+  `publication_status` and `benchmark_model`, and has no 8.2.1 template. The
+  50-field table this package implements exists only on the dev branch.
 - An unrecognised option, profile name or leading flag is matched against the
   real names by `suggest.py`, which ignores case and treats `-`/`_` alike and
   accepts a prefix (so `-v` reaches `--version` and `sshkey` reaches
