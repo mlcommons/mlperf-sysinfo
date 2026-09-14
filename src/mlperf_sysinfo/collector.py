@@ -26,6 +26,7 @@ import yaml
 from . import __version__, logs
 from .config import SshTarget, SysinfoConfig
 from .errors import CaptureError, CheckFailed, DependencyMissing
+from .output import normalize_training_status
 from .preflight import CheckReport, NodeStatus, run_check
 from .profiles import Profile
 from .profiles import load as load_profile
@@ -188,7 +189,10 @@ def build_mlc_kwargs(
 
     What each field *says* is still decided here, from the config: the
     automation's own defaults are placeholder strings ("Insert ... here"), and
-    those must never reach a deliverable.
+    those must never reach a deliverable. Almost all of them are applied by
+    ``output.py`` after collection, which keeps one authority over what a
+    published field holds. ``system_availability_status`` is the exception --
+    see below for why it has to be sent as well.
     """
     if targets is None:
         targets = config.all_targets
@@ -216,6 +220,26 @@ def build_mlc_kwargs(
         "system_name": config.system.name,
         "quiet": True,
     }
+
+    # The one config-owned field the automation reads rather than just
+    # defaulting: the _training variation validates the status while it
+    # assembles the field set, and rejects the whole collection when it is not
+    # one of the four legal strings. Its own default is the placeholder
+    # "Insert system availability status here", so leaving this unsent fails
+    # every training capture before there is any document to overlay.
+    #
+    # The normalized value goes over, not the raw one. Both sides keep their
+    # own alias table and the two have already drifted -- "on premise" with a
+    # space resolves here and not there -- so sending what this package
+    # resolved keeps this package the authority on what a config may say. A
+    # value that resolves nowhere is sent as written, so the automation's
+    # complaint names what the config actually holds instead of its own
+    # placeholder.
+    availability = config.system.availability
+    if profile.benchmark == "training":
+        availability = normalize_training_status(availability)[0] or availability
+    if availability:
+        kwargs["system_availability_status"] = availability
 
     # The profiles that write endpoint_url are the ones that probe it, so one
     # flag covers both. A value that is prose rather than a URL is still sent:

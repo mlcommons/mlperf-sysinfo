@@ -16,7 +16,7 @@ import json
 import pytest
 
 from mlperf_sysinfo import profiles
-from mlperf_sysinfo.collector import output_filename
+from mlperf_sysinfo.collector import build_mlc_kwargs, output_filename
 from mlperf_sysinfo.config import SysinfoConfig
 from mlperf_sysinfo.errors import CaptureError
 from mlperf_sysinfo.output import (
@@ -265,6 +265,49 @@ class TestAvailabilityVocabulary:
         different words helps nobody."""
         assert normalize_training_status("") == ("", None)
         assert normalize_training_status(None) == ("", None)
+
+
+class TestAvailabilityReachesTheAutomation:
+    """The status is the one config-owned field the automation reads rather
+    than just defaulting, so it has to be sent as well as overlaid.
+
+    Every other field is applied afterwards by ``output.py``. This one cannot
+    be: the ``_training`` variation validates it while it assembles the field
+    set, and a capture that does not send it dies on the automation's own
+    placeholder before there is any document left to overlay.
+    """
+
+    def test_the_status_is_sent(self, training_config, training_profile, tmp_path):
+        kwargs = build_mlc_kwargs(training_config, training_profile, tmp_path)
+        assert kwargs["system_availability_status"] == "Available on-premise"
+
+    def test_a_shorthand_is_resolved_before_it_is_sent(
+        self, training_config, training_profile, tmp_path
+    ):
+        """The automation keeps its own alias table and the two have drifted --
+        "on premise" with a space resolves here and not there. Sending what
+        this package resolved keeps this package the authority."""
+        training_config.system.availability = "on premise"
+        kwargs = build_mlc_kwargs(training_config, training_profile, tmp_path)
+        assert kwargs["system_availability_status"] == "Available on-premise"
+
+    def test_an_unresolvable_value_is_sent_as_written(
+        self, training_config, training_profile, tmp_path
+    ):
+        """``check`` refuses this first, so only a direct library caller gets
+        here. Sending it raw makes the automation's complaint name what the
+        config actually holds rather than its own placeholder."""
+        training_config.system.availability = "sort of available"
+        kwargs = build_mlc_kwargs(training_config, training_profile, tmp_path)
+        assert kwargs["system_availability_status"] == "sort of available"
+
+    def test_nothing_is_sent_when_it_is_unset(
+        self, training_config, training_profile, tmp_path
+    ):
+        training_config.system.availability = None
+        assert "system_availability_status" not in build_mlc_kwargs(
+            training_config, training_profile, tmp_path
+        )
 
 
 class TestCheckRefusesBeforeCollecting:

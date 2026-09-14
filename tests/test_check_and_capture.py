@@ -253,6 +253,15 @@ class TestMlcInvocation:
         assert "node_config" not in kwargs
         assert "config_summary_notes" not in kwargs
 
+    def test_availability_is_sent_unnormalised_off_the_training_path(
+        self, good_config_file, endpoints_profile, tmp_path
+    ):
+        """The four-value vocabulary is training's. Everyone else keeps the
+        word their own checker uses, so the config value goes over as it is."""
+        cfg = load_config(good_config_file)
+        kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)
+        assert kwargs["system_availability_status"] == "available"
+
     def test_ssh_ids_are_normalised_with_ports(self, good_config_file, endpoints_profile, tmp_path):
         cfg = load_config(good_config_file)
         kwargs = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)

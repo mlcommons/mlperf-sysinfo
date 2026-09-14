@@ -42,7 +42,12 @@ set, and shaping it would write every hardware field empty. What comes back is
 the probed truth about the hardware; `output.py` puts it in the published
 template's order and writes every config-supplied value over whatever the
 automation defaulted, because those defaults are placeholder strings
-(`"Insert system category here"`) that must never reach a deliverable.
+(`"Insert system category here"`) that must never reach a deliverable. The one
+exception travels both ways: `_training` *validates*
+`system_availability_status` as it assembles the field set, so
+`build_mlc_kwargs` sends it too -- normalized, since both sides keep their own
+alias table and they have drifted. Leaving it to the overlay alone fails every
+training capture on the automation's own placeholder.
 
 Adding a working group that can use an existing field set is still one YAML
 profile and no collection change.

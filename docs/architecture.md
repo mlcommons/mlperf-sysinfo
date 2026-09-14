@@ -30,6 +30,13 @@ the probed truth. What each submitter-supplied field *says* is decided here.
     such field is written from the config or left genuinely empty, and
     `check` is what refuses to run when one that matters is empty.
 
+    One field travels in both directions. The `_training` variation
+    *validates* `system_availability_status` while it assembles the field set,
+    so a capture that leaves it to the automation dies on that placeholder
+    before there is any document to write over. It is sent with the
+    invocation as well as applied afterwards -- normalized first, so this
+    package stays the authority on what a config may say.
+
 !!! note "A profile still costs no automation change"
     Requirements, recommendations, field order, which optional probes run and
     what the file is called are all profile data. A new group that can use an
@@ -124,7 +131,7 @@ the run and closes with how it ended:
 ```text
 mlperf-sysinfo capture — 20260819_202120
 Started   : 2026-08-19T20:21:20+05:30
-Versions  : mlperf-sysinfo 1.0.0a9, mlc-scripts 1.2.0a6
+Versions  : mlperf-sysinfo 1.0.0a10, mlc-scripts 1.2.0a6
 Profile   : endpoints (round 6.0, benchmark endpoints)
 Config    : /home/user/sysinfo.yaml
 Output    : /home/user/results/my_run/system_desc.json
