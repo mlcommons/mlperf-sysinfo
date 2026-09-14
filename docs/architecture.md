@@ -179,16 +179,3 @@ say which rules produced it.
 
 Pass `--verbose` to watch the automation on the terminal as well. The log is
 still written either way.
-
-## Known limitations
-
-!!! danger "Credentials can reach the run log"
-    Keeping secrets in `${VAR}` keeps them out of your config file and out of
-    git, but the underlying automation prints its own command lines. A Redfish
-    password may appear in the log. Treat `.mlperf-sysinfo/` as sensitive.
-
-!!! danger "Remote scratch files are not confined"
-    When collecting over SSH, the automation writes temporary files on each
-    remote node, under `$HOME` and `/tmp` there. This package cannot redirect
-    those, because its environment does not propagate over the automation's own
-    SSH leg.

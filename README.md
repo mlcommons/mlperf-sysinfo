@@ -278,16 +278,6 @@ keep their columns. Log lines go to stderr, so `2>trace.log` separates the two.
 `--log-level debug|info|warning|error` sets what shows; `--verbose` means
 `debug`.
 
-Two caveats worth knowing:
-
-- **Credentials can be echoed by the collection layer.** Keeping them in
-  `${VAR}` keeps them out of your config file and out of git, but the
-  underlying automation prints its own command lines, so a Redfish password may
-  appear in the run log. Treat that directory as sensitive.
-- **Remote scratch files are not confined.** When collecting over SSH, the
-  automation writes its own temporary files on each remote node (under `$HOME`
-  and `/tmp` there). This package cannot redirect those.
-
 ## Partial captures
 
 An unreachable node stops the run. `--allow-partial` proceeds anyway, and the
