@@ -45,8 +45,8 @@ nav:
       - Inference: configuration/inference.md
       - Training: configuration/training.md
   - Commands: commands.md
-  - Architecture: architecture.md
   - Sample outputs: outputs.md
+  - Architecture: architecture.md
 
 validation:
   anchors: warn
