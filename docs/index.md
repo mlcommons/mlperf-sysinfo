@@ -186,8 +186,7 @@ WARNINGS
 
 | If you want to… | Read |
 | --- | --- |
-| Understand how the pieces fit together | [Architecture](architecture.md) |
 | Write or fix a config | [The config file](configuration/index.md) |
 | Look up a command or an exit code | [Commands](commands.md) |
+| Understand how the pieces fit together | [Architecture](architecture.md) |
 | See what a real capture produces | [Sample outputs](outputs.md) |
-| Call it from your own tool | [Embedding it](embedding.md) |

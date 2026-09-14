@@ -39,15 +39,14 @@ theme:
 
 nav:
   - Home: index.md
-  - Architecture: architecture.md
   - Config File:
       - configuration/index.md
       - Endpoints: configuration/endpoints.md
       - Inference: configuration/inference.md
       - Training: configuration/training.md
   - Commands: commands.md
+  - Architecture: architecture.md
   - Sample outputs: outputs.md
-  - Embedding it: embedding.md
 
 validation:
   anchors: warn
