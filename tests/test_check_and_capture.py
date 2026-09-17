@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 
 import pytest
 
@@ -568,6 +569,49 @@ class TestCollectionIsVerified:
         result = capture(load_config(good_config_file), endpoints_profile)
         assert result.complete
         assert result.nodes_collected == 2 == result.nodes_expected
+
+
+class TestDeclaredAcceleratorMustBeDetected:
+    """A backend named in the config and no accelerator in the result is a
+    failed probe. Writing it produces a file that says "0 accelerators" about a
+    machine the submitter knows has GPUs."""
+
+    def test_declared_accelerator_with_none_detected_is_an_error(
+        self, good_config_file, endpoints_profile, all_reachable, monkeypatch, collected
+    ):
+        gpuless = copy.deepcopy(collected)
+        gpuless["node_types"][0]["accelerator_info"] = []
+        monkeypatch.setattr(capture_mod, "_require_mlc", lambda: _FakeMlc(gpuless))
+        cfg = load_config(good_config_file)
+        with pytest.raises(Exception, match="system.accelerator: cuda"):
+            capture(cfg, endpoints_profile)
+
+    def test_no_accelerator_declared_is_left_alone(
+        self, tmp_path, endpoints_profile, all_reachable, monkeypatch, collected
+    ):
+        config = copy.deepcopy(GOOD_CONFIG)
+        config["system"]["accelerator"] = "none"
+        path = write_yaml(tmp_path / "sysinfo.yaml", config)
+        gpuless = copy.deepcopy(collected)
+        gpuless["node_types"][0]["accelerator_info"] = []
+        monkeypatch.setattr(capture_mod, "_require_mlc", lambda: _FakeMlc(gpuless))
+        result = capture(load_config(path), endpoints_profile)
+        assert result.complete
+        assert result.accelerator_total == 0
+
+    def test_a_partial_capture_only_warns(
+        self, good_config_file, endpoints_profile, all_reachable, monkeypatch, collected, caplog
+    ):
+        """The file already says it does not describe the whole system, so the
+        missing accelerator may belong to the node that never answered."""
+        gpuless = copy.deepcopy(collected)
+        gpuless["node_types"][0]["accelerator_info"] = []
+        gpuless["node_types"][0]["number_of_nodes"] = 1  # two were asked for
+        monkeypatch.setattr(capture_mod, "_require_mlc", lambda: _FakeMlc(gpuless))
+        with caplog.at_level(logging.WARNING):
+            result = capture(load_config(good_config_file), endpoints_profile, allow_partial=True)
+        assert not result.complete
+        assert "system.accelerator: cuda" in caplog.text
 
 
 class TestPartialNarrowsTheRequest:
