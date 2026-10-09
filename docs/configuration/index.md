@@ -175,13 +175,6 @@ runs in.
 `validate` lists every field that came back `N/A`. Edit those in the written
 file before you submit.
 
-!!! note "Nodes that have run this tool before"
-    TPU detection was added to the collection scripts in mlc-scripts 1.2.0a8.
-    A node keeps its copy of those scripts between runs, so a node first set
-    up by an earlier release may not recognise `tpu`. Set `remote.isolated:
-    true`, which gives each run a fresh copy, or run `mlc pull repo` once on
-    that node.
-
 ## `${VAR}` — secrets stay out of the file
 
 Any `${VAR}` anywhere in the config is replaced from the environment, including
