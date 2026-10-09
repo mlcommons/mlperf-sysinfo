@@ -108,7 +108,7 @@ wherever it turns up.
 | `availability` | string | — | **Required.** One of the [four values above](#systemavailability-four-values-and-no-others). Written as `status` |
 | `cooling` | string | — | **Required.** e.g. `air`, `liquid`, `passive` |
 | `networking_topology` | string | — | **Required.** Written as `host_networking_topology` |
-| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left at the default, a GPU system captures no accelerator at all |
+| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `tpu` \| `none`. Left at the default, a GPU or TPU system captures no accelerator at all. See [Accelerators](index.md#systemaccelerator-which-accelerators-are-probed) for what each value probes |
 
 ### `training`
 

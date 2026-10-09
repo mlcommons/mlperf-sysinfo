@@ -43,10 +43,44 @@ _SSH_BASE_OPTS = [
     "-o", f"ConnectTimeout={SSH_TIMEOUT}",
 ]
 
+#: TPUs have no command-line tool to ask, so the TPU probe reads PCI sysfs the
+#: way get-tpu-devices does: Google's vendor id, a known chip id, and one line
+#: per chip rather than per PCI function -- a TPU7x chip exposes two functions.
+#: The ids mirror TPU_CHIPS in get-tpu-devices/detect.py. A chip missing from
+#: this table is still captured; check just cannot name it.
+_TPU_SYSFS = "/sys/bus/pci/devices"
+_TPU_CHIP_NAMES = {
+    "0x005e": "TPU v4",
+    "0x0063": "TPU v5e",
+    "0x0062": "TPU v5p",
+    "0x006f": "TPU v6e",
+    "0x0076": "TPU7x",
+}
+
+
+def _tpu_query(sysfs: str = _TPU_SYSFS) -> str:
+    """A POSIX ``sh`` script printing ``uniq -c`` lines such as '4 TPU v5p'.
+
+    Wrapped in ``sh -c`` because ssh hands it to the remote login shell,
+    which need not be sh-compatible. Double quotes only inside the script, so
+    the single-quoted wrapper never has to be escaped.
+    """
+    cases = " ".join(f'{dev}) n="{name}" ;;' for dev, name in _TPU_CHIP_NAMES.items())
+    script = (
+        f"for d in {sysfs}/*; do "
+        '[ "$(cat "$d/vendor" 2>/dev/null)" = 0x1ae0 ] || continue; '
+        f'case "$(cat "$d/device" 2>/dev/null)" in {cases} *) continue ;; esac; '
+        'b="${d##*/}"; echo "${b%.*} $n"; '
+        'done | sort -u | cut -d" " -f2- | sort | uniq -c'
+    )
+    return f"sh -c '{script}'"
+
+
 _ACCEL_QUERY = {
     "cuda": "nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | sort | uniq -c",
     "rocm": "rocm-smi --showproductname 2>/dev/null | head -20",
     "xpu": "xpu-smi discovery 2>/dev/null | head -20",
+    "tpu": _tpu_query(),
 }
 
 
