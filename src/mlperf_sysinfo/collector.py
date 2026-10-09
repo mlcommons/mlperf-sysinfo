@@ -472,7 +472,7 @@ def capture(
         if report.endpoint and report.endpoint.ok:
             emit("ok", str(config.serving.url), f"framework detected -- {report.endpoint.detail}")
 
-        from .output import shape  # local import keeps module import order simple
+        from .output import accelerator_count, shape  # local: import order
 
         final = shape(
             collected,
@@ -483,6 +483,25 @@ def capture(
             partial=partial,
             package_version=__version__,
         )
+
+        # The config named a backend and not one node reported an accelerator.
+        # That is a probe that failed, not a CPU-only system, and the file it
+        # would produce says "0 accelerators" about a machine the submitter
+        # knows has GPUs -- believing the request over the result again, one
+        # field further in. A partial capture already announces that it does
+        # not describe the whole system, so there it is only worth saying.
+        if config.system.accelerator != "none":
+            if accelerator_count(final.get("node_types") or [final]) == 0:
+                detail = (
+                    f"no accelerator was detected on any node, but the config declares "
+                    f"system.accelerator: {config.system.accelerator}. See {log_path} for "
+                    "what the probe returned, or set system.accelerator: none if the "
+                    "system really has none."
+                )
+                if not partial:
+                    raise CaptureError(detail)
+                log.warning("%s", detail)
+                emit("warn", "accelerators", "none detected")
 
         out_file.write_text(json.dumps(final, indent=2) + "\n")
         log.info("wrote %s", out_file)

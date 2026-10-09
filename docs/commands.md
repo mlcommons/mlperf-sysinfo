@@ -199,6 +199,23 @@ With `--allow-partial`:
 
 Exit code `1`, and the file carries `"complete": false`.
 
+### When the accelerator never turns up
+
+A config that names a backend and a result with no accelerator anywhere do not
+go together: the probe failed, and the file would say `0 accelerators` about a
+machine you know has GPUs.
+
+```console
+error  no accelerator was detected on any node, but the config declares
+       system.accelerator: rocm. See .../capture_20260819_202120.log for what the
+       probe returned, or set system.accelerator: none if the system really has
+       none.
+```
+
+Nothing is written. On a partial capture it is a warning instead, since the
+missing accelerator may belong to the node that never answered, and that file
+already says it does not describe the whole system.
+
 ---
 
 ## `show`
