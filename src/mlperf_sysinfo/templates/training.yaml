@@ -27,7 +27,7 @@ system:
   #   Preview
   #   Research, Development, or Internal (RDI)
 
-  accelerator: cuda              # cuda | rocm | xpu | none
+  accelerator: cuda              # cuda | rocm | xpu | tpu | none
   cooling: air                   # air | liquid | passive
 
   # How the nodes are wired to each other. No probe can see past the local

@@ -117,6 +117,64 @@ ones, and the ones that go stale.
 This applies to the SSH nodes only. The machine running the command writes
 where `output.dir` says, isolated or not.
 
+## `system.accelerator` — which accelerators are probed
+
+`system.accelerator` names the type of accelerator in the system. It selects
+the detection step that runs on each node during `capture`, and the command
+`check` runs to list the accelerators on each node. One value applies to every
+node in the config.
+
+| Value | Hardware | What `check` runs on each node |
+| --- | --- | --- |
+| `cuda` | NVIDIA GPUs | `nvidia-smi` |
+| `rocm` | AMD GPUs | `rocm-smi` |
+| `xpu` | Intel GPUs | `xpu-smi` |
+| `tpu` | Google Cloud TPUs | Reads the PCI device list under `/sys/bus/pci/devices` |
+| `none` | No accelerator | Nothing. No accelerator fields are collected |
+
+What `check` prints for a node, for example `TPU v5p x 4`, is for information
+only. A reachable node with nothing listed is still collected.
+
+```yaml
+system:
+  accelerator: tpu
+```
+
+### TPU
+
+Supported chips are TPU v4, v5e, v5p, v6e and TPU7x. TPU v2 and v3 are not
+supported.
+
+Detection reads the PCI device list on each node. It does not need `sudo`,
+JAX or libtpu, and it works while a benchmark is running on the TPUs.
+`accelerators_per_node` is the number of TPU chips. A TPU7x chip, which has
+two TensorCores, counts as one.
+
+Not every field can be read from the node. The table shows where each
+accelerator field comes from and which ones you may need to complete yourself:
+
+| Field | Source | When to complete it yourself |
+| --- | --- | --- |
+| `accelerator_model_name` | PCI device ID | — |
+| `accelerators_per_node` | Count of TPU chips | — |
+| `accelerator_memory_capacity` | Published HBM size for the chip | — |
+| `accelerator_memory_type` | Published memory type for the chip | TPU v6e: written empty, because the memory type is not yet confirmed |
+| `accelerator_host_interconnect` | PCIe link speed and width | On Cloud TPU VMs the link is not visible to the VM, so the field comes back `N/A` |
+| `accelerator_interconnect` | `ICI` for every supported chip | `endpoints` profile: comes back `N/A` |
+| `accelerator_interconnect_topology` | Slice shape from the Cloud TPU or GKE metadata, for example `2x2x1 (v5p-8)` | Outside Cloud TPU and GKE it is empty. `inference` and `training` profiles only |
+
+For a multislice job, `accelerator_interconnect_topology` also gives the
+number of slices, for example `2x2x1 (tpu7x-8), 4 slices`, when the job
+launcher sets `MEGASCALE_NUM_SLICES`. The network between slices is not
+detected. Describe it in `submission.notes.hardware`.
+
+The `libtpu` version is recorded in the software fields when the `libtpu` or
+`libtpu-nightly` package is installed in the Python environment the collection
+runs in.
+
+`validate` lists every field that came back `N/A`. Edit those in the written
+file before you submit.
+
 ## `${VAR}` — secrets stay out of the file
 
 Any `${VAR}` anywhere in the config is replaced from the environment, including

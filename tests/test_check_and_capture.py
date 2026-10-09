@@ -7,6 +7,8 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import shutil
+import subprocess
 
 import pytest
 
@@ -308,6 +310,54 @@ class TestMlcInvocation:
         cfg = load_config(good_config_file)
         kwargs = build_mlc_kwargs(cfg, profiles.load("inference"), tmp_path)
         assert "_redfish" not in kwargs["tags"]
+
+    def test_tpu_becomes_the_tpu_variation(self, tmp_path, endpoints_profile):
+        data = copy.deepcopy(GOOD_CONFIG)
+        data["system"]["accelerator"] = "tpu"
+        cfg = load_config(write_yaml(tmp_path / "c.yaml", data))
+        tags = build_mlc_kwargs(cfg, endpoints_profile, tmp_path)["tags"].split(",")
+        assert "_tpu" in tags
+        assert "_cuda" not in tags
+
+
+def _fake_pci_device(root, address, vendor, device):
+    path = root / address
+    path.mkdir()
+    (path / "vendor").write_text(f"{vendor}\n")
+    (path / "device").write_text(f"{device}\n")
+
+
+@pytest.mark.skipif(shutil.which("sh") is None, reason="needs a POSIX sh")
+class TestTpuProbe:
+    """The TPU probe is a shell script run on the node, so it is run here too,
+    against a fake sysfs tree, rather than only inspected as a string."""
+
+    def _run(self, sysfs) -> str:
+        query = check_mod._tpu_query(str(sysfs))
+        result = subprocess.run(query, shell=True, capture_output=True, text=True, check=True)
+        return check_mod._summarise_accelerators(result.stdout)
+
+    def test_counts_each_chip(self, tmp_path):
+        for slot in range(4, 8):
+            _fake_pci_device(tmp_path, f"0000:00:0{slot}.0", "0x1ae0", "0x0062")
+        assert self._run(tmp_path) == "TPU v5p x 4"
+
+    def test_a_chip_with_two_functions_counts_once(self, tmp_path):
+        """TPU7x exposes each TensorCore as its own PCI function."""
+        for slot in (4, 5):
+            for function in (0, 1):
+                _fake_pci_device(tmp_path, f"0000:00:0{slot}.{function}", "0x1ae0", "0x0076")
+        assert self._run(tmp_path) == "TPU7x x 2"
+
+    def test_other_devices_are_ignored(self, tmp_path):
+        _fake_pci_device(tmp_path, "0000:00:04.0", "0x1ae0", "0x0063")
+        _fake_pci_device(tmp_path, "0000:00:05.0", "0x1ae0", "0x0042")  # gVNIC
+        _fake_pci_device(tmp_path, "0000:00:06.0", "0x10de", "0x2330")  # NVIDIA
+        assert self._run(tmp_path) == "TPU v5e x 1"
+
+    def test_no_tpu_says_nothing(self, tmp_path):
+        _fake_pci_device(tmp_path, "0000:00:05.0", "0x1ae0", "0x0042")
+        assert self._run(tmp_path) == ""
 
 
 class TestRemoteFootprint:

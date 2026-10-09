@@ -16,7 +16,7 @@ system:
   name: CHANGEME                 # e.g. 8xH100_TRT
   category: datacenter           # datacenter | edge
   availability: available        # available | preview | rdi
-  accelerator: cuda              # cuda | rocm | xpu | none
+  accelerator: cuda              # cuda | rocm | xpu | tpu | none
   cooling: air
   # type_detail: ""
 

@@ -26,7 +26,7 @@ nothing.
 **The one idea: `mlc-scripts` collects, this package composes.** Probing a
 machine (SSH, CPU/memory/accelerator detection, Redfish, serving-log parsing)
 is shared, unchanged automation, pinned to an exact pre-release
-(`mlc-scripts==1.2.0a6`) that this package is tested against. Every decision
+(`mlc-scripts==1.2.0a8`) that this package is tested against. Every decision
 about what a working group must supply is policy, and lives here instead.
 
 The automation assembles a *different field set per benchmark*, so the
@@ -209,9 +209,15 @@ back out into `output.dir`.
   neither is exposed, deliberately — the defaults are self-contained, and a
   path in a config file is a path somebody has to keep true. Add them if a
   real `/tmp` turns out to be too small, not before.
-- A node the automation cannot reach fails the whole collection as of
-  mlc-scripts 1.2.0a6, by design upstream. `--allow-partial` therefore drops
+- A node the automation cannot reach fails the whole collection since
+  mlc-scripts 1.2.0a5, by design upstream. `--allow-partial` therefore drops
   unreachable nodes from `ssh_ids` (and drops `serving_node` when that is the
   one that is down) rather than sending them and forgiving the result: there
   is no result to forgive. `nodes_expected` deliberately stays at what the
   config asked for, so the capture still reports itself as partial.
+- TPU captures under `endpoints` write `accelerator_interconnect: "N/A"`.
+  `get-tpu-devices` exports `ICI` only as an env var, which the flat field
+  sets read, and not in the per-device records the nested `accelerator_info`
+  is built from. The fix belongs in mlc-scripts, not in an overlay here.
+  `preflight._TPU_CHIP_NAMES` mirrors `TPU_CHIPS` in that script's
+  `detect.py`; keep the two in step when a TPU generation is added.

@@ -72,7 +72,7 @@ wherever it turns up.
 | `name` | string | — | **Required.** Identifier for the system under test |
 | `shortened_name` | string | — | **Required.** Short form of `name` for tables and charts. At most 20 characters, and `check` stops if it is longer. Written as `shortened_system_name` |
 | `availability` | string | — | **Required.** e.g. `available`, `preview`, `rdi` |
-| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely, so a GPU system left at the default captures no accelerator at all |
+| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `tpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely, so a GPU or TPU system left at the default captures no accelerator at all. See [Accelerators](index.md#systemaccelerator-which-accelerators-are-probed) for what each value probes |
 | `cooling` | string | — | **Recommended.** e.g. `air`, `liquid`, `passive`. Written into every node type |
 | `size` | string | computed | Overrides `system_size`. Rarely needed. See [Sample outputs](../outputs.md#system_size) for what this profile computes |
 

@@ -67,7 +67,7 @@ wherever it turns up.
 | `name` | string | — | **Required.** Identifier for the system under test |
 | `category` | string | — | **Required.** `datacenter` or `edge`. Written as `system_type` |
 | `availability` | string | — | **Required.** e.g. `available`, `preview`, `rdi`. Written as `status` |
-| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely, so a GPU system left at the default captures no accelerator at all |
+| `accelerator` | enum | `none` | **Recommended.** `cuda` \| `rocm` \| `xpu` \| `tpu` \| `none`. Left out it defaults to `none`, which skips accelerator probing entirely, so a GPU or TPU system left at the default captures no accelerator at all. See [Accelerators](index.md#systemaccelerator-which-accelerators-are-probed) for what each value probes |
 | `cooling` | string | — | e.g. `air`, `liquid`, `passive` |
 | `type_detail` | string | — | Free text, written as `system_type_detail`. Rack or chassis detail the field list has no column of its own for |
 | `size` | string | computed | Overrides `system_size`. Rarely needed. See [Sample outputs](../outputs.md#system_size) for what this profile computes |

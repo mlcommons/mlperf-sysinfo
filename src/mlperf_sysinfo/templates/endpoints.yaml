@@ -16,7 +16,7 @@ system:
   name: CHANGEME                 # e.g. H100x8_vLLM
   shortened_name: CHANGEME       # at most 20 characters, e.g. H100x8
   availability: available        # available | preview | rdi
-  accelerator: cuda              # cuda | rocm | xpu | none
+  accelerator: cuda              # cuda | rocm | xpu | tpu | none
   cooling: air                   # air | liquid | passive
 
 nodes:
