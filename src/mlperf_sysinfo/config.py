@@ -214,7 +214,7 @@ class SystemConfig(BaseModel):
     availability: str | None = Field(
         default=None, description="e.g. available, preview, rdi."
     )
-    accelerator: Literal["cuda", "rocm", "xpu", "none"] = "none"
+    accelerator: Literal["cuda", "rocm", "xpu", "tpu", "none"] = "none"
     cooling: str | None = None
     type_detail: str | None = None
     networking_topology: str | None = Field(
